@@ -1,0 +1,8 @@
+Business Name,Category,Phone Number,Website URL,Full Address,City,State,Country,Zip,Rating,Reviews,Place ID,Google Maps Link
+TEST DATA - Example Domain Services,Web Testing,+1 202-555-0143,https://example.com,1600 Test Ave,Washington,DC,United States,20500,4.5,23,ChIJtest000001,https://maps.google.com/?cid=1
+TEST DATA - Northgate Plumbing,Plumber,(020) 7946 0958,,12 Northgate Road,London,,United Kingdom,EC1A 1BB,4.8,112,ChIJtest000002,https://maps.google.com/?cid=2
+TEST DATA - Harbour Dental Care,Dentist,+61 2 9374 4000,http://this-domain-does-not-resolve-xyzq.example,88 Harbour St,Sydney,NSW,Australia,2000,4.2,64,ChIJtest000003,https://maps.google.com/?cid=3
+TEST DATA - Karachi Auto Works,Auto Repair,+92 300 1234567,https://www.iana.org,Block 5 Clifton,Karachi,Sindh,Pakistan,75600,3.9,18,ChIJtest000004,https://maps.google.com/?cid=4
+TEST DATA - Maple Grove Landscaping,Landscaper,416-555-0199,facebook.com/maplegrovelandscaping,42 Maple Grove Rd,Toronto,ON,Canada,M5H 2N2,4.6,87,ChIJtest000005,https://maps.google.com/?cid=5
+TEST DATA - Duplicate Example Services,Web Testing,+1 202-555-0143,https://example.com,1600 Test Ave,Washington,DC,United States,20500,4.5,23,ChIJtest000001,https://maps.google.com/?cid=1
+TEST DATA - No Contact Bakery,Bakery,,,7 Baker Street,Manchester,,United Kingdom,M1 1AA,4.1,9,ChIJtest000006,https://maps.google.com/?cid=6

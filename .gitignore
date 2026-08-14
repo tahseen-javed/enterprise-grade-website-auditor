@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# Runtime data. NEVER commit this folder.
+#
+# It holds the SQLite database (your leads and their contact details), uploaded
+# CSVs, generated exports and audit reports, logs, and data/config/*.json -
+# which contains YOUR identity (name, email, WhatsApp number) and any API keys
+# you enter in Settings.
+# ---------------------------------------------------------------------------
+data/
+
+# Local machine configuration (ports). Ship .env.example instead.
+.env
+.env.local
+.env.*.local
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.egg-info/
+build/
+develop-eggs/
+eggs/
+sdist/
+wheels/
+pip-wheel-metadata/
+
+# ---------------------------------------------------------------------------
+# Node / frontend
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ---------------------------------------------------------------------------
+# Logs, databases, temp
+# ---------------------------------------------------------------------------
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.pid
+*.tmp
+*.bak
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

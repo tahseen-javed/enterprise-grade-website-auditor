@@ -1,0 +1,29 @@
+# Normalize line endings so the repo is consistent regardless of the machine
+# that committed.
+* text=auto eol=lf
+
+# Windows launchers must keep CRLF - cmd.exe mis-parses LF-only .bat files.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell scripts must stay LF even when checked out on Windows.
+*.sh text eol=lf
+
+# Binary assets - never normalize or diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.xlsx binary
+*.db binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+
+# Generated; collapse in diffs and exclude from language stats.
+package-lock.json linguist-generated=true -diff
