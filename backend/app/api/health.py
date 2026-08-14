@@ -25,7 +25,6 @@ from ..settings import (
     config,
     engine_public,
     get_engine,
-    profile_status,
 )
 
 router = APIRouter(tags=["health"])
@@ -189,17 +188,6 @@ async def system_health() -> Dict[str, Any]:
         ),
     }
 
-    prof = profile_status()
-    profile_component = {
-        "status": "healthy" if prof["configured"] else "warning",
-        "detail": (
-            "Your outreach identity is configured."
-            if prof["configured"]
-            else "Outreach identity incomplete — missing: " + ", ".join(prof["missing_core"])
-            + ". Drafts will not be generated until this is filled in."
-        ),
-    }
-
     # Confirming the interpreter is the project venv matters: running against a
     # global Python would silently use different package versions.
     in_venv = sys.prefix != sys.base_prefix
@@ -227,7 +215,6 @@ async def system_health() -> Dict[str, Any]:
         "export_engine": export_status,
         "file_system": _check_fs(),
         "ports": ports_status,
-        "outreach_profile": profile_component,
         "event_stream": {
             "status": "healthy",
             "detail": f"{bus.subscriber_count} dashboard client(s) connected.",
