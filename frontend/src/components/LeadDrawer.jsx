@@ -1,15 +1,11 @@
 import { useState } from 'react'
 import { api, downloadUrl } from '../lib/api'
 import {
-  AUDIT_CATEGORY_LABELS, AUDIT_STATUS, CHANNEL, EMAIL_STATUS, LINKEDIN_STATUS, PHONE_STATUS,
-  WEBSITE_STATUS, WHATSAPP_STATUS, dateTime, describe, tierClass,
+  AUDIT_CATEGORY_LABELS, AUDIT_STATUS, WEBSITE_STATUS, dateTime, describe, tierClass,
 } from '../lib/format'
 import { useFetch } from '../lib/store'
 import { BandPill, CategoryScorecards, ScoreDial, SeverityBreakdown } from './charts'
-import {
-  IconAlert, IconCheck, IconExternal, IconGlobe, IconLinkedIn, IconMail, IconPhone,
-  IconSparkle, IconWhatsApp,
-} from './icons'
+import { IconAlert, IconCheck, IconExternal, IconSparkle } from './icons'
 import { Alert, Badge, CopyButton, Drawer, Empty, ErrorState, KV, Progress, Skeleton } from './ui'
 
 export default function LeadDrawer({ leadId, onClose }) {
@@ -67,8 +63,6 @@ export default function LeadDrawer({ leadId, onClose }) {
 
 function Overview({ data }) {
   const site = describe(WEBSITE_STATUS, data.website_status)
-  const chan = describe(CHANNEL, data.best_channel)
-  const wa = data.phone ? WHATSAPP_STATUS[data.phone.whatsapp_status] : null
 
   return (
     <>
@@ -79,7 +73,6 @@ function Overview({ data }) {
             <div className="row row-wrap" style={{ gap: 7, marginBottom: 10 }}>
               <Badge tone={site.tone}>{site.label}</Badge>
               {data.opportunity_tier && <Badge tone="brand">{data.opportunity_tier} opportunity</Badge>}
-              <Badge tone={chan.tone}>{chan.label}</Badge>
               {data.audit_status && (
                 <Badge tone={describe(AUDIT_STATUS, data.audit_status).tone}>
                   {describe(AUDIT_STATUS, data.audit_status).label}
@@ -109,97 +102,6 @@ function Overview({ data }) {
             checks that actually failed, weighted by your Settings.
           </p>
         )}
-      </div>
-
-      {data.channel_reason && (
-        <Alert tone="info" title="Why this channel:">{data.channel_reason}</Alert>
-      )}
-
-      <div className="card">
-        <div className="card-head"><h2>Contact</h2></div>
-        <div className="card-body stack">
-          {data.phone ? (
-            <div>
-              <div className="row row-wrap" style={{ gap: 8 }}>
-                <IconPhone size={14} />
-                <span className="strong mono">{data.phone.normalized || data.phone.raw}</span>
-                <Badge tone={describe(PHONE_STATUS, data.phone.status).tone}>
-                  {describe(PHONE_STATUS, data.phone.status).label}
-                </Badge>
-                {data.phone.country && <Badge tone="neutral">{data.phone.country}</Badge>}
-                {data.phone.type && <Badge tone="neutral">{data.phone.type.replace(/_/g, ' ')}</Badge>}
-                <div className="spacer" />
-                <CopyButton text={data.phone.normalized || data.phone.raw} />
-              </div>
-              {data.phone.raw !== data.phone.normalized && (
-                <div className="xsmall muted" style={{ marginTop: 4 }}>
-                  Original value in your CSV: <span className="mono">{data.phone.raw}</span>
-                </div>
-              )}
-              <div className="row" style={{ gap: 8, marginTop: 9 }}>
-                <IconWhatsApp size={14} />
-                <Badge tone={wa?.tone || 'neutral'}>{wa?.label || data.phone.whatsapp_status}</Badge>
-                {data.phone.whatsapp_url && (
-                  <a className="btn btn-sm btn-wa" href={data.phone.whatsapp_url} target="_blank" rel="noreferrer">
-                    <IconExternal size={12} /> Open chat
-                  </a>
-                )}
-              </div>
-              <p className="xsmall muted" style={{ marginTop: 5 }}>{data.phone.whatsapp_reason}</p>
-            </div>
-          ) : (
-            <p className="small muted">No phone number was supplied for this business.</p>
-          )}
-
-          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--sp-4)' }}>
-            {data.emails.length ? (
-              data.emails.map((e) => (
-                <div key={e.email} style={{ marginBottom: 12 }}>
-                  <div className="row row-wrap" style={{ gap: 8 }}>
-                    <IconMail size={14} />
-                    <span className="strong mono break">{e.email}</span>
-                    <Badge tone={describe(EMAIL_STATUS, e.status).tone} title={describe(EMAIL_STATUS, e.status).help}>
-                      {describe(EMAIL_STATUS, e.status).label}
-                    </Badge>
-                    {e.is_role && <Badge tone="neutral">role address</Badge>}
-                    <div className="spacer" />
-                    <CopyButton text={e.email} />
-                  </div>
-                  <div className="xsmall muted" style={{ marginTop: 3 }}>
-                    Found on{' '}
-                    <a href={e.source_url} target="_blank" rel="noreferrer">{e.page_type || 'page'}</a>{' '}
-                    via {e.source_type}
-                    {e.mx_records?.length ? ` · MX: ${e.mx_records.slice(0, 2).join(', ')}` : ''}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="small muted">
-                No public email address was found on this website. Nothing was guessed.
-              </p>
-            )}
-          </div>
-
-          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 'var(--sp-4)' }}>
-            {data.linkedin_url ? (
-              <div className="row row-wrap" style={{ gap: 8 }}>
-                <IconLinkedIn size={14} />
-                <a href={data.linkedin_url} target="_blank" rel="noreferrer" className="strong mono break">
-                  {data.linkedin_url}
-                </a>
-                <Badge tone="linkedin">Company page</Badge>
-                <div className="spacer" />
-                <CopyButton text={data.linkedin_url} />
-              </div>
-            ) : (
-              <p className="small muted">
-                {describe(LINKEDIN_STATUS, data.linkedin_status).label === 'Not checked'
-                  ? 'LinkedIn was not looked for — WhatsApp or email was already usable for this lead.'
-                  : 'No LinkedIn company page was found linked from this website. Nothing was guessed.'}
-              </p>
-            )}
-          </div>
-        </div>
       </div>
 
       <div className="card">
