@@ -13,6 +13,17 @@ $cfg.BackendPort = Get-EffectivePort 'backend' $cfg.BackendPort
 
 Write-Head 'Stopping this project'
 
+# ORDER MATTERS. The crash-recovery watchdog exists to restart the app when it
+# disappears, so it must be stopped before the app is - otherwise it would do
+# exactly its job and bring the app straight back up.
+#
+# -SkipChildren matters here: after a recovery restart the app IS a child of
+# the watchdog, and killing children would terminate it abruptly instead of
+# letting the polite shutdown below checkpoint any running audit.
+if (Read-ProcessId 'watchdog') {
+    Stop-OwnedProcess 'watchdog' 'Crash recovery' -SkipChildren | Out-Null
+}
+
 $ok = Stop-OwnedProcess 'backend' 'App'
 
 # Compatibility cleanup: earlier versions ran the frontend as its own Vite

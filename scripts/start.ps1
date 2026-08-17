@@ -6,20 +6,51 @@
 
 param(
     [switch]$NoBrowser,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$NoSetup,    # skip the automatic first-run setup even if things are missing
+    [switch]$Watchdog,   # keep a supervisor running that restarts the app if it crashes
+    [switch]$NoWatchdog  # used by the watchdog itself, so recovery cannot spawn a second one
 )
 
 . (Join-Path $PSScriptRoot 'lib.ps1')
-
-$cfg = Get-ProjectConfig
 
 Write-Host ''
 Write-Host '  Advanced Website Auditor' -ForegroundColor White
 Write-Host "  $ProjectRoot" -ForegroundColor DarkGray
 
+# --- self-healing setup -------------------------------------------------------
+#
+# Anything missing (no virtual environment, no dashboard build, no .env, no
+# data folders) is created here rather than telling the user to go and run a
+# different script first. This is what makes one double-click enough on a
+# machine that has never run the project. When everything is already present
+# bootstrap.ps1 fingerprints match and it returns in well under a second, so
+# this costs nothing on every subsequent launch.
 Write-Head 'Checks'
-if (-not (Test-Prerequisites)) { Write-Host ''; exit 1 }
-Write-Ok 'Python environment and frontend build found.'
+if (-not (Test-Prerequisites -Quiet)) {
+    if ($NoSetup) {
+        Write-Err 'Setup is incomplete and -NoSetup was given.'
+        Write-Info 'Run START.bat (or setup.bat) to finish setting up.'
+        Write-Host ''
+        exit 1
+    }
+    Write-Info 'First run for this copy of the project - setting things up automatically.'
+    & (Join-Path $PSScriptRoot 'bootstrap.ps1')
+    if ($LASTEXITCODE -ne 0) { Write-Host ''; exit $LASTEXITCODE }
+    Write-Head 'Checks'
+    if (-not (Test-Prerequisites)) { Write-Host ''; exit 1 }
+}
+Write-Ok 'Python environment and dashboard build found.'
+
+# Read configuration only after bootstrap, which creates .env when absent.
+$cfg = Get-ProjectConfig
+$configProblems = Test-ProjectConfig $cfg
+if ($configProblems.Count -gt 0) {
+    foreach ($p in $configProblems) { Write-Err $p }
+    Write-Info "Edit: $(Join-Path $ProjectRoot '.env')"
+    Write-Host ''
+    exit 1
+}
 
 # --- already running? ---------------------------------------------------------
 if (Test-ProcessRunning 'backend') {
@@ -130,6 +161,46 @@ Write-Host ''
 Write-Info 'The app keeps running after this window closes.'
 Write-Info 'Use stop.bat to stop it, or status.bat to check on it.'
 Write-Host ''
+
+# --- crash recovery ------------------------------------------------------------
+#
+# Started detached and hidden, after the app is confirmed healthy. It watches
+# this project's process only, and stands down the moment stop.bat removes the
+# PID file, so it can never fight a deliberate shutdown.
+if ($Watchdog -and -not $NoWatchdog) {
+    $existingWatchdog = Read-ProcessId 'watchdog'
+    if ($existingWatchdog -and (Get-OwnedProcess $existingWatchdog)) {
+        Write-Info "Crash recovery already active (PID $existingWatchdog)."
+    } else {
+        try {
+            # Start-Process does not quote arguments for you, and this project's
+            # path can contain spaces (e.g. "C:\Users\Jo Bloggs\My Tools\..."),
+            # so the script path must be quoted explicitly - exactly as the
+            # backend's --app-dir is above. Without this the watchdog silently
+            # fails to launch on any path containing a space.
+            $wdArgs = @(
+                '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
+                '-File', ('"' + (Join-Path $PSScriptRoot 'watchdog.ps1') + '"'),
+                '-Port', "$port"
+            )
+            # Deliberately NOT redirected. With no redirection Start-Process
+            # gives the supervisor its own (hidden) console, so it inherits
+            # nothing from whoever launched START.bat and the launching window
+            # closes immediately. Redirecting here instead makes it inherit the
+            # caller's handles, which leaves that window hanging around waiting
+            # for a background process that is designed never to exit.
+            # The watchdog keeps its own record in data\logs\watchdog.log.
+            $wd = Start-Process -FilePath 'powershell.exe' -ArgumentList $wdArgs `
+                -WorkingDirectory $ProjectRoot -WindowStyle Hidden -PassThru
+            Save-ProcessId 'watchdog' $wd.Id
+            Write-Info "Crash recovery active (PID $($wd.Id)) - the app restarts itself if it stops."
+        } catch {
+            # Recovery is a safety net, not a requirement: the app is already
+            # healthy, so failing to supervise it must not fail the launch.
+            Write-Warn "Crash recovery could not be started: $($_.Exception.Message)"
+        }
+    }
+}
 
 if (-not $NoBrowser) {
     Start-Sleep -Milliseconds 400

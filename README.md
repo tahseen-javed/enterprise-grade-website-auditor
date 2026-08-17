@@ -15,37 +15,67 @@ or restarting this app never touches the other one.
 
 ## Quick start
 
-```
-1. setup.bat      (once - creates the Python environment, installs packages, builds the frontend)
-2. start.bat      (opens the dashboard in your browser)
-3. New audit       a website URL
-```
+**Double-click `START.bat`. That is the whole procedure.**
 
-VS Code is not required for any of this. The whole app is **one process**: the backend
-serves the built dashboard directly, so there is nothing else to install or keep running.
-`start.bat` launches it detached, so it keeps running after the window closes.
+There is no separate setup step. The first run prepares everything it needs - the
+private Python environment, all packages, the dashboard build and the database -
+then starts the app and opens your browser. That takes a few minutes and happens
+once. Every later run starts in a couple of seconds, because each step is
+fingerprinted and skipped when nothing has changed.
 
-The project folder is fully portable - copy it anywhere (a different drive, a different
-PC, a different Windows account) and run `setup.bat` there. Nothing here is hardcoded to
-a machine, username or path; ports, project location and runtime paths are all detected
-at run time.
+You never need to know Python, npm, virtualenv, Vite, FastAPI or any command.
+VS Code is not required, and neither is a terminal.
 
-| Script | What it does |
+| File | What it does |
 |---|---|
-| `setup.bat` | One-time (or after pulling changes): creates `backend\.venv`, installs Python + Node packages, builds `frontend\dist`, initialises the database |
-| `start.bat` | Starts the app detached, waits until it responds, opens the browser |
-| `stop.bat` | Stops **only this project's** process |
+| **`START.bat`** | **The one file you need.** Sets up anything missing, starts the app, waits until it is healthy, opens the browser, and keeps a crash-recovery watchdog running |
+| `stop.bat` | Stops **only this project's** processes |
 | `restart.bat` | Stop, then start |
 | `status.bat` | What's running, on which port, component health, recent jobs |
+| `setup.bat` | Optional. Prepares without starting. `setup.bat -Force` reinstalls and rebuilds |
 | `scripts\install-autostart.ps1` | Optional: start at Windows log-on (asks first) |
 | `scripts\uninstall-autostart.ps1` | Removes that scheduled task |
+
+### Giving this to someone else
+
+Copy or ZIP the project folder, send it, and tell them to double-click `START.bat`.
+It works from any folder, on any drive, under any Windows account, including paths
+containing spaces. Nothing is hardcoded to a machine, username, drive or path -
+every location is resolved relative to wherever `START.bat` happens to be sitting.
+
+The only genuine prerequisite is **Python 3.10+**, and **Node.js 18+** if the
+dashboard has not already been built. If either is missing, `START.bat` installs
+it automatically through `winget` (the package manager built into Windows 10 and
+11, using Microsoft's official source). If `winget` is unavailable - typically an
+older or company-locked machine - it prints the official download page and exactly
+what to click, then carries on from where it left off next time. No installer is
+ever fetched from an unofficial URL.
+
+### What the first run does, in order
+
+1. Checks Windows, PowerShell and free disk space
+2. Creates `data\` and its subfolders, and `.env` from `.env.example`
+3. Validates the configuration (port range, host)
+4. Finds Python 3.10+ (or installs it) and creates `backend\.venv`
+5. Installs the backend packages into that venv - never into your system Python
+6. Finds Node 18+ (or installs it), installs the build tools, builds `frontend\dist`
+7. Creates the database if there isn't one, and **opens an existing one untouched**
+8. Starts the app, waits for `/api/health`, opens the browser
+9. Leaves a watchdog running that restarts the app if it ever stops
+
+Steps 5 and 6 are the slow ones, and both are skipped on later runs unless
+`requirements.txt`, `package-lock.json` or the dashboard source actually changed.
+
+Setup is **non-destructive**. It only creates what is missing: your database,
+audit history, reports, exports, uploads and settings are never reset or
+overwritten, so re-running `START.bat` on a working installation is always safe.
 
 **URL on this machine** (port set in `.env`, see *Ports* below):
 
 - Dashboard + API: http://localhost:8021 (API docs at `/api/docs`)
 
-Node.js is only needed at `setup.bat` time, to build the dashboard. Once `frontend\dist`
-exists, `start.bat` never launches Node - only the Python backend runs, and it serves
+Node.js is only needed while the dashboard is being built. Once `frontend\dist`
+exists, `START.bat` never launches Node - only the Python backend runs, and it serves
 the built dashboard itself.
 
 ---
@@ -109,7 +139,7 @@ This project defaults to **8021**, kept deliberately apart from the sister outre
 project (which runs on its own port on this machine). Both can run at the same time —
 they do not share a process, a port, a database, or config.
 
-`start.bat` checks the port first. If your preferred port is held by something outside
+`START.bat` checks the port first. If your preferred port is held by something outside
 this project, it does not just fail: it automatically uses the next free port **for that
 run** and tells you plainly which URL is actually live. Your `.env` preference is never
 overwritten by that fallback - to make a different port permanent, set
@@ -118,7 +148,7 @@ overwritten by that fallback - to make a different port permanent, set
 ### Process safety
 
 The service is never matched by a generic name like `python.exe` or `uvicorn`.
-`start.bat` records the real PID it launched, and before stopping anything `stop.bat`
+`START.bat` records the real PID it launched, and before stopping anything `stop.bat`
 confirms the live process's executable path or command line contains **this project's
 directory**. A PID that fails that check is reported and left running - so the sister
 project's Python process on a nearby port is never touched, and vice versa.
@@ -127,7 +157,7 @@ project's Python process on a nearby port is never touched, and vice versa.
 
 ## Resume
 
-Every audit is checkpointed. If the app closes mid-run, `start.bat` then **Jobs → Resume**
+Every audit is checkpointed. If the app closes mid-run, `START.bat` then **Jobs → Resume**
 picks up only the unfinished work.
 
 ---
@@ -190,8 +220,8 @@ frontend/
     pages/           Audits (results + drawer), Upload (new audit), Reports, Jobs,
                      Settings, System Health
     components/      UI primitives, charts, audit drawer, activity log
-  dist/              production build (created by setup.bat; gitignored - not committed)
-scripts/             start / stop / restart / status / setup / autostart (lib.ps1 shared)
+  dist/              production build (created by START.bat; gitignored - not committed)
+scripts/             bootstrap / start / stop / restart / status / watchdog (lib.ps1 shared)
 data/                database, uploads, exports, reports, logs, config
 sample_data/         labelled synthetic CSV for testing only
 ```
@@ -207,7 +237,7 @@ this app's job is auditing websites, not managing leads.
 
 ## Troubleshooting
 
-**Port already in use** — `start.bat` names the program holding it, then automatically
+**Port already in use** — `START.bat` names the program holding it, then automatically
 falls back to the next free port for that run. To pin a specific port instead, set it
 in `.env`.
 
@@ -215,6 +245,26 @@ in `.env`.
 
 **Dashboard loads but shows no data** — run `status.bat`; if the backend is not
 responding the dashboard shows a reconnecting indicator rather than blank panels.
+
+**"Python could not be installed automatically"** — the machine has no `winget`.
+Install Python from the link `START.bat` prints (python.org), tick *Add to PATH*,
+then double-click `START.bat` again. It resumes from where it stopped.
+
+**First run fails part-way through** — almost always no internet, or a firewall
+blocking `pypi.org` / `registry.npmjs.org`. The message says which one. Reconnect
+and run `START.bat` again: completed steps are remembered and not repeated.
+
+**The app keeps restarting by itself** — that is the crash-recovery watchdog doing
+its job because the app is exiting. `data\logs\watchdog.log` records each attempt
+and the reason; `backend.err.log` has the underlying error. After 5 restarts in
+10 minutes it stops trying and says so, rather than looping forever.
+
+**Setup seems to repeat work every launch** — delete `data\run\setup.stamp.json`
+and run `START.bat` once; a corrupt fingerprint file makes it re-verify. This
+costs time only, never data.
+
+**Force a full reinstall** — `setup.bat -Force`. This rebuilds the environment and
+dashboard but still never touches your database, reports or settings.
 
 ---
 
