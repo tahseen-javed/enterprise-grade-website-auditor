@@ -55,9 +55,21 @@ from any folder, on any drive, under any account, including paths containing
 spaces. Nothing is hardcoded to a machine, username, drive or path - every
 location is resolved relative to wherever the launcher is sitting.
 
-**macOS note:** the first time, macOS may say `START.command` is from an
-unidentified developer. Right-click it once, choose *Open*, then *Open* again.
-If it will not run at all, `chmod +x START.command` in Terminal.
+**macOS - the one unavoidable step.** The very first time, macOS may refuse to
+open `START.command` because it is not from an identified developer. This is an
+Apple security rule for every unsigned script and cannot be bypassed from inside
+the file. Do this once:
+
+> **Right-click** (or Control-click) `START.command` -> choose **Open** ->
+> click **Open** in the dialog.
+
+That is it. Every launch after that is a normal double-click. The launcher then
+fixes its own permissions and clears the download quarantine on the rest of the
+project, so no Terminal command is ever needed.
+
+If this Mac has no Python, the launcher installs it with Homebrew when Homebrew
+is present, and otherwise opens the official python.org download page in the
+browser with step-by-step instructions - a normal Mac installer, no Terminal.
 
 **Linux note:** if double-clicking does nothing, run `chmod +x start.sh` then
 `./start.sh`. Debian/Ubuntu also needs `python3-venv` (`sudo apt install
