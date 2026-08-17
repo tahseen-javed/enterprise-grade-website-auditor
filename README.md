@@ -15,7 +15,13 @@ or restarting this app never touches the other one.
 
 ## Quick start
 
-**Double-click `START.bat`. That is the whole procedure.**
+**Double-click the launcher for your system. That is the whole procedure.**
+
+| Your computer | Double-click this |
+|---|---|
+| **Windows** | `START.bat` |
+| **macOS** | `START.command` |
+| **Linux** | `start.sh` (or `./start.sh` in a terminal) |
 
 There is no separate setup step. The first run prepares everything it needs - the
 private Python environment, all packages, the dashboard build and the database -
@@ -26,34 +32,51 @@ fingerprinted and skipped when nothing has changed.
 You never need to know Python, npm, virtualenv, Vite, FastAPI or any command.
 VS Code is not required, and neither is a terminal.
 
-| File | What it does |
-|---|---|
-| **`START.bat`** | **The one file you need.** Sets up anything missing, starts the app, waits until it is healthy, opens the browser, and keeps a crash-recovery watchdog running |
-| `stop.bat` | Stops **only this project's** processes |
-| `restart.bat` | Stop, then start |
-| `status.bat` | What's running, on which port, component health, recent jobs |
-| `setup.bat` | Optional. Prepares without starting. `setup.bat -Force` reinstalls and rebuilds |
-| `scripts\install-autostart.ps1` | Optional: start at Windows log-on (asks first) |
-| `scripts\uninstall-autostart.ps1` | Removes that scheduled task |
+| Windows | macOS / Linux | What it does |
+|---|---|---|
+| **`START.bat`** | **`START.command`** / **`start.sh`** | **The one file you need.** Sets up anything missing, starts the app, waits until it is healthy, opens the browser |
+| `stop.bat` | `./stop.sh` | Stops **only this project's** processes |
+| `restart.bat` | `./restart.sh` | Stop, then start |
+| `status.bat` | `./status.sh` | What's running, on which port, and whether it answers |
+| `setup.bat` | `python3 scripts/launcher.py setup` | Optional. Prepares without starting (`-Force` / `--force` to redo) |
+| `scripts\install-autostart.ps1` | — | Optional: start at Windows log-on (asks first) |
+
+Windows runs through PowerShell (`scripts\*.ps1`) and additionally keeps a
+crash-recovery watchdog running. macOS and Linux run through
+`scripts/launcher.py`, a standard-library-only Python program that performs the
+same setup and startup sequence. Both write the same `data/run/backend.pid`, so
+either platform's tooling reports the same state.
 
 ### Giving this to someone else
 
-Copy or ZIP the project folder, send it, and tell them to double-click `START.bat`.
-It works from any folder, on any drive, under any Windows account, including paths
-containing spaces. Nothing is hardcoded to a machine, username, drive or path -
-every location is resolved relative to wherever `START.bat` happens to be sitting.
+Copy or ZIP the project folder, send it, and tell them to double-click the
+launcher for their system (`START.bat`, `START.command`, or `start.sh`). It works
+from any folder, on any drive, under any account, including paths containing
+spaces. Nothing is hardcoded to a machine, username, drive or path - every
+location is resolved relative to wherever the launcher is sitting.
+
+**macOS note:** the first time, macOS may say `START.command` is from an
+unidentified developer. Right-click it once, choose *Open*, then *Open* again.
+If it will not run at all, `chmod +x START.command` in Terminal.
+
+**Linux note:** if double-clicking does nothing, run `chmod +x start.sh` then
+`./start.sh`. Debian/Ubuntu also needs `python3-venv` (`sudo apt install
+python3-venv`) - the launcher says so if it is missing.
 
 The only genuine prerequisite is **Python 3.10+**, and **Node.js 18+** if the
-dashboard has not already been built. If either is missing, `START.bat` installs
-it automatically through `winget` (the package manager built into Windows 10 and
-11, using Microsoft's official source). If `winget` is unavailable - typically an
-older or company-locked machine - it prints the official download page and exactly
-what to click, then carries on from where it left off next time. No installer is
-ever fetched from an unofficial URL.
+dashboard has not already been built. If either is missing the launcher installs
+it automatically using the platform's own package manager and its official
+repositories - `winget` on Windows, Homebrew on macOS, `apt`/`dnf`/`pacman` on
+Linux. No installer is ever fetched from an ad-hoc URL.
+
+Where that is not possible (no package manager, or a Linux install that would
+need a password the launcher deliberately will not prompt for), it prints the
+official download page and exactly what to click, then carries on from where it
+left off next time.
 
 ### What the first run does, in order
 
-1. Checks Windows, PowerShell and free disk space
+1. Checks the operating system, shell and free disk space
 2. Creates `data\` and its subfolders, and `.env` from `.env.example`
 3. Validates the configuration (port range, host)
 4. Finds Python 3.10+ (or installs it) and creates `backend\.venv`
@@ -61,21 +84,21 @@ ever fetched from an unofficial URL.
 6. Finds Node 18+ (or installs it), installs the build tools, builds `frontend\dist`
 7. Creates the database if there isn't one, and **opens an existing one untouched**
 8. Starts the app, waits for `/api/health`, opens the browser
-9. Leaves a watchdog running that restarts the app if it ever stops
+9. On Windows, leaves a watchdog running that restarts the app if it ever stops
 
 Steps 5 and 6 are the slow ones, and both are skipped on later runs unless
 `requirements.txt`, `package-lock.json` or the dashboard source actually changed.
 
 Setup is **non-destructive**. It only creates what is missing: your database,
 audit history, reports, exports, uploads and settings are never reset or
-overwritten, so re-running `START.bat` on a working installation is always safe.
+overwritten, so re-running the launcher on a working installation is always safe.
 
 **URL on this machine** (port set in `.env`, see *Ports* below):
 
 - Dashboard + API: http://localhost:8021 (API docs at `/api/docs`)
 
-Node.js is only needed while the dashboard is being built. Once `frontend\dist`
-exists, `START.bat` never launches Node - only the Python backend runs, and it serves
+Node.js is only needed while the dashboard is being built. Once `frontend/dist`
+exists, the launcher never launches Node - only the Python backend runs, and it serves
 the built dashboard itself.
 
 ---

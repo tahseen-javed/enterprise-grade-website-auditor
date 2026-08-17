@@ -7,8 +7,11 @@
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
 
-# Shell scripts must stay LF even when checked out on Windows.
+# Shell scripts must stay LF even when checked out on Windows. A CRLF line
+# ending after #!/bin/bash makes macOS/Linux fail with "bad interpreter".
 *.sh text eol=lf
+*.command text eol=lf
+launcher.py text eol=lf
 
 # Binary assets - never normalize or diff as text.
 *.png binary
