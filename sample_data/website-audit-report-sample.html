@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Website Intelligence Report — SAMPLE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-void:#05070d;
+    --bg-navy:#0a0f1e;
+    --bg-card:#0e1526;
+    --bg-card-2:#111a30;
+    --line:rgba(148,178,255,0.12);
+    --line-bright:rgba(148,178,255,0.24);
+    --blue:#3b82f6;
+    --cyan:#22d3ee;
+    --violet:#8b5cf6;
+    --green:#34d399;
+    --amber:#fbbf24;
+    --red:#fb5b6f;
+    --text-hi:#f4f7ff;
+    --text-mid:#a9b4d0;
+    --text-low:#6b7593;
+    --glow-blue: 0 0 40px rgba(59,130,246,0.25);
+    --glow-cyan: 0 0 40px rgba(34,211,238,0.18);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:var(--bg-void); }
+  body{
+    font-family:'Inter',sans-serif;
+    color:var(--text-hi);
+    background:
+      radial-gradient(1200px 600px at 12% -10%, rgba(59,130,246,0.16), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(34,211,238,0.10), transparent 55%),
+      radial-gradient(800px 500px at 50% 110%, rgba(139,92,246,0.10), transparent 60%),
+      var(--bg-void);
+    min-height:100vh;
+    padding:28px;
+  }
+  .page{
+    max-width:1360px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .display{font-family:'Space Grotesk',sans-serif;}
+
+  /* SAMPLE BADGE STRIP */
+  .sample-strip{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    background:repeating-linear-gradient(135deg, rgba(251,191,36,0.10) 0px, rgba(251,191,36,0.10) 10px, rgba(251,191,36,0.04) 10px, rgba(251,191,36,0.04) 20px);
+    border:1px solid rgba(251,191,36,0.35);
+    border-radius:10px;
+    padding:9px 16px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    color:#ffd873;
+    text-transform:uppercase;
+  }
+  .sample-strip .dot{width:6px;height:6px;border-radius:50%;background:#ffd873;box-shadow:0 0 8px #ffd873;}
+
+  /* HEADER */
+  .header{
+    display:grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap:16px;
+    background:linear-gradient(155deg, var(--bg-card) 0%, var(--bg-navy) 100%);
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:30px 34px;
+    position:relative;
+    overflow:hidden;
+  }
+  .header::before{
+    content:"";
+    position:absolute; inset:0;
+    background: radial-gradient(500px 260px at 90% 10%, rgba(34,211,238,0.14), transparent 70%);
+    pointer-events:none;
+  }
+  .header-left{display:flex; flex-direction:column; justify-content:center; gap:10px; position:relative; z-index:1;}
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:0.16em;
+    color:var(--cyan); text-transform:uppercase; width:fit-content;
+    background:rgba(34,211,238,0.08); border:1px solid rgba(34,211,238,0.28);
+    padding:5px 11px; border-radius:100px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan); box-shadow:0 0 8px var(--cyan); animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1} 50%{opacity:0.35}}
+  .biz-name{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:38px; letter-spacing:-0.02em; line-height:1.05;}
+  .biz-url{color:var(--cyan); font-family:'JetBrains Mono',monospace; font-size:15px;}
+  .meta-row{display:flex; gap:22px; margin-top:6px; flex-wrap:wrap;}
+  .meta-item{display:flex; flex-direction:column; gap:2px;}
+  .meta-label{font-size:11px; color:var(--text-low); text-transform:uppercase; letter-spacing:0.1em; font-family:'JetBrains Mono',monospace;}
+  .meta-val{font-size:14.5px; color:var(--text-hi); font-weight:600;}
+
+  .header-right{
+    display:flex; align-items:center; justify-content:center; gap:26px; position:relative; z-index:1;
+  }
+  .score-ring-wrap{position:relative; width:172px; height:172px; display:flex; align-items:center; justify-content:center;}
+  .score-ring-wrap svg{filter: drop-shadow(0 0 18px rgba(59,130,246,0.45));}
+  .score-center{position:absolute; display:flex; flex-direction:column; align-items:center;}
+  .score-num{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:46px; line-height:1; background:linear-gradient(135deg,#8fd6ff,#3b82f6); -webkit-background-clip:text; background-clip:text; color:transparent;}
+  .score-suffix{font-size:13px; color:var(--text-low); margin-top:2px;}
+  .score-label-block{display:flex; flex-direction:column; gap:8px;}
+  .score-title{font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600; color:var(--text-hi);}
+  .score-desc{font-size:13px; color:var(--text-mid); max-width:190px; line-height:1.5;}
+  .grade-pill{
+    display:inline-flex; align-items:center; gap:6px; width:fit-content;
+    background:rgba(52,211,153,0.10); border:1px solid rgba(52,211,153,0.35); color:var(--green);
+    padding:4px 10px; border-radius:100px; font-size:12px; font-weight:700; font-family:'JetBrains Mono',monospace;
+  }
+
+  /* SECTION LABEL */
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; margin:6px 4px 2px;}
+  .section-title{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px; letter-spacing:-0.01em; display:flex; align-items:center; gap:10px;}
+  .section-title .bar{width:4px; height:18px; border-radius:3px; background:linear-gradient(180deg,var(--cyan),var(--blue));}
+  .section-sub{font-size:12.5px; color:var(--text-low); font-family:'JetBrains Mono',monospace;}
+
+  /* SCORECARD GRID */
+  .scorecard-grid{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:14px;
+  }
+  .score-card{
+    background:linear-gradient(160deg, var(--bg-card) 0%, var(--bg-navy) 100%);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:18px 18px 16px;
+    display:flex; flex-direction:column; gap:10px;
+    position:relative;
+    transition:border-color .2s;
+  }
+  .score-card:hover{border-color:var(--line-bright);}
+  .sc-top{display:flex; align-items:center; justify-content:space-between;}
+  .sc-icon{
+    width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+    background:rgba(59,130,246,0.10); border:1px solid rgba(59,130,246,0.25); font-size:16px;
+  }
+  .sc-value{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px;}
+  .sc-name{font-size:12.5px; color:var(--text-mid); font-weight:600; text-transform:uppercase; letter-spacing:0.04em;}
+  .sc-bar-track{width:100%; height:6px; border-radius:6px; background:rgba(255,255,255,0.06); overflow:hidden;}
+  .sc-bar-fill{height:100%; border-radius:6px;}
+  .sc-tag{font-size:11px; font-family:'JetBrains Mono',monospace; padding:2px 8px; border-radius:100px; width:fit-content;}
+
+  /* CHARTS ROW */
+  .charts-row{
+    display:grid;
+    grid-template-columns: 1.15fr 1fr 1fr;
+    gap:14px;
+  }
+  .chart-card{
+    background:linear-gradient(160deg, var(--bg-card) 0%, var(--bg-navy) 100%);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px 22px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .chart-title{font-family:'Space Grotesk',sans-serif; font-size:14.5px; font-weight:700;}
+  .chart-title span{color:var(--text-low); font-weight:500; font-size:12px; font-family:'JetBrains Mono',monospace; display:block; margin-top:2px;}
+
+  /* bar chart (category comparison) */
+  .bar-chart{display:flex; flex-direction:column; gap:9px; margin-top:4px;}
+  .bar-row{display:grid; grid-template-columns:96px 1fr 34px; align-items:center; gap:10px;}
+  .bar-row .lbl{font-size:11.5px; color:var(--text-mid); font-weight:600;}
+  .bar-track{height:9px; border-radius:6px; background:rgba(255,255,255,0.06); overflow:hidden;}
+  .bar-fill{height:100%; border-radius:6px;}
+  .bar-row .val{font-size:12px; font-family:'JetBrains Mono',monospace; color:var(--text-hi); text-align:right;}
+
+  /* donut */
+  .donut-wrap{display:flex; align-items:center; gap:18px; flex:1;}
+  .donut-legend{display:flex; flex-direction:column; gap:9px;}
+  .legend-item{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-mid);}
+  .legend-dot{width:9px;height:9px;border-radius:3px;}
+  .legend-item b{color:var(--text-hi); font-family:'JetBrains Mono',monospace; margin-left:auto; padding-left:14px;}
+
+  /* health gauge */
+  .health-wrap{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; flex:1;}
+  .health-stats{display:flex; gap:18px; margin-top:6px;}
+  .hstat{text-align:center;}
+  .hstat .n{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:19px;}
+  .hstat .l{font-size:10.5px; color:var(--text-low); text-transform:uppercase; letter-spacing:0.06em; margin-top:2px;}
+
+  /* PROBLEMS + ACTIONS ROW */
+  .lower-row{
+    display:grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap:14px;
+  }
+  .problems-card, .actions-card{
+    background:linear-gradient(160deg, var(--bg-card) 0%, var(--bg-navy) 100%);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px 22px;
+  }
+  .problem-list{display:flex; flex-direction:column; gap:10px; margin-top:12px;}
+  .problem-item{
+    display:grid;
+    grid-template-columns: auto 1fr auto;
+    gap:14px;
+    align-items:start;
+    background:rgba(255,255,255,0.02);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:13px 15px;
+  }
+  .prio-badge{
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:0.04em;
+    padding:4px 9px; border-radius:7px; height:fit-content; white-space:nowrap;
+  }
+  .prio-critical{background:rgba(251,91,111,0.14); color:var(--red); border:1px solid rgba(251,91,111,0.4);}
+  .prio-high{background:rgba(251,191,36,0.13); color:var(--amber); border:1px solid rgba(251,191,36,0.4);}
+  .prio-medium{background:rgba(59,130,246,0.13); color:#7fb0ff; border:1px solid rgba(59,130,246,0.4);}
+  .problem-title{font-weight:700; font-size:14px; color:var(--text-hi); margin-bottom:3px;}
+  .problem-why{font-size:12.5px; color:var(--text-mid); line-height:1.5;}
+  .impact-tag{font-size:11px; font-family:'JetBrains Mono',monospace; color:var(--text-low); text-align:right; white-space:nowrap;}
+
+  .actions-list{display:flex; flex-direction:column; gap:11px; margin-top:12px;}
+  .action-item{display:flex; gap:13px; align-items:flex-start;}
+  .action-num{
+    flex-shrink:0; width:26px; height:26px; border-radius:8px;
+    background:linear-gradient(135deg, var(--blue), var(--cyan));
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-weight:700; font-size:12px; color:#04101f;
+    box-shadow:0 0 14px rgba(59,130,246,0.35);
+  }
+  .action-text{font-size:13.5px; color:var(--text-hi); line-height:1.5; padding-top:3px;}
+  .action-text b{color:var(--cyan); font-weight:700;}
+
+  /* CTA */
+  .cta{
+    background:
+      radial-gradient(600px 260px at 15% 20%, rgba(59,130,246,0.35), transparent 60%),
+      radial-gradient(600px 260px at 85% 80%, rgba(34,211,238,0.28), transparent 60%),
+      linear-gradient(135deg, #0d1730, #0a0f1e);
+    border:1px solid var(--line-bright);
+    border-radius:20px;
+    padding:38px 40px;
+    display:flex; align-items:center; justify-content:space-between; gap:30px;
+    position:relative; overflow:hidden;
+  }
+  .cta-left h2{font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px; letter-spacing:-0.01em; margin-bottom:8px;}
+  .cta-left p{font-size:14px; color:var(--text-mid); max-width:520px; line-height:1.55;}
+  .cta-btn{
+    flex-shrink:0;
+    background:linear-gradient(135deg, var(--cyan), var(--blue));
+    color:#031024; font-weight:700; font-family:'Space Grotesk',sans-serif; font-size:15px;
+    padding:15px 28px; border-radius:11px; border:none; cursor:pointer;
+    box-shadow:0 0 30px rgba(59,130,246,0.45), 0 4px 14px rgba(0,0,0,0.4);
+    white-space:nowrap;
+  }
+
+  .footer-note{text-align:center; font-size:11px; color:var(--text-low); font-family:'JetBrains Mono',monospace; padding:6px 0 2px; letter-spacing:0.04em;}
+
+  @media (max-width:1100px){
+    .header{grid-template-columns:1fr;}
+    .scorecard-grid{grid-template-columns:repeat(2,1fr);}
+    .charts-row{grid-template-columns:1fr;}
+    .lower-row{grid-template-columns:1fr;}
+    .cta{flex-direction:column; align-items:flex-start;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="sample-strip"><span class="dot"></span> SAMPLE REPORT — DEMO DATA FOR ILLUSTRATION ONLY, NOT A REAL CLIENT AUDIT</div>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="eyebrow"><span class="dot"></span> AI Website Intelligence Report</div>
+      <div class="biz-name">Northfield &amp; Ash Furniture Co.</div>
+      <div class="biz-url">northfieldandash.com</div>
+      <div class="meta-row">
+        <div class="meta-item">
+          <div class="meta-label">Audit Date</div>
+          <div class="meta-val">August 17, 2026</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Industry</div>
+          <div class="meta-val">Furniture &amp; Home Retail</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Pages Scanned</div>
+          <div class="meta-val">184</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">Prepared By</div>
+          <div class="meta-val">Signal Peak Digital</div>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="score-ring-wrap">
+        <svg width="172" height="172" viewBox="0 0 172 172">
+          <circle cx="86" cy="86" r="74" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="14"/>
+          <circle cx="86" cy="86" r="74" fill="none" stroke="url(#ringGrad)" stroke-width="14"
+            stroke-dasharray="464.9" stroke-dashoffset="130.2" stroke-linecap="round" transform="rotate(-90 86 86)"/>
+          <defs>
+            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#22d3ee"/>
+              <stop offset="100%" stop-color="#3b82f6"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="score-center">
+          <div class="score-num">72</div>
+          <div class="score-suffix">/ 100</div>
+        </div>
+      </div>
+      <div class="score-label-block">
+        <div class="score-title">Overall Website Score</div>
+        <div class="score-desc">Good foundation with clear, high-impact gaps in performance and local visibility.</div>
+        <div class="grade-pill">▲ Grade B− · Above industry avg (61)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCORECARD -->
+  <div>
+    <div class="section-head">
+      <div class="section-title"><span class="bar"></span>Visual Scorecard</div>
+      <div class="section-sub">8 CATEGORIES · WEIGHTED SCORING MODEL</div>
+    </div>
+    <div class="scorecard-grid">
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">⚙️</div><div class="sc-value">68</div></div>
+        <div class="sc-name">Technical SEO</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:68%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div>
+        <div class="sc-tag" style="background:rgba(251,191,36,0.13); color:var(--amber);">Needs Work</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">📝</div><div class="sc-value">81</div></div>
+        <div class="sc-name">On-Page SEO</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:81%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div>
+        <div class="sc-tag" style="background:rgba(52,211,153,0.12); color:var(--green);">Good</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">📍</div><div class="sc-value">54</div></div>
+        <div class="sc-name">Local SEO</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:54%; background:linear-gradient(90deg,var(--red),var(--amber));"></div></div>
+        <div class="sc-tag" style="background:rgba(251,91,111,0.14); color:var(--red);">Critical</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">⚡</div><div class="sc-value">59</div></div>
+        <div class="sc-name">Performance</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:59%; background:linear-gradient(90deg,var(--red),var(--amber));"></div></div>
+        <div class="sc-tag" style="background:rgba(251,191,36,0.13); color:var(--amber);">Needs Work</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">♿</div><div class="sc-value">77</div></div>
+        <div class="sc-name">Accessibility</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:77%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div>
+        <div class="sc-tag" style="background:rgba(52,211,153,0.12); color:var(--green);">Good</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">🔒</div><div class="sc-value">88</div></div>
+        <div class="sc-name">Security</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:88%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div>
+        <div class="sc-tag" style="background:rgba(52,211,153,0.12); color:var(--green);">Strong</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">🔗</div><div class="sc-value">63</div></div>
+        <div class="sc-name">Off-Page</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:63%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div>
+        <div class="sc-tag" style="background:rgba(251,191,36,0.13); color:var(--amber);">Needs Work</div>
+      </div>
+
+      <div class="score-card">
+        <div class="sc-top"><div class="sc-icon">🛒</div><div class="sc-value">70</div></div>
+        <div class="sc-name">UX &amp; Conversion</div>
+        <div class="sc-bar-track"><div class="sc-bar-fill" style="width:70%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div>
+        <div class="sc-tag" style="background:rgba(52,211,153,0.12); color:var(--green);">Good</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div>
+    <div class="section-head">
+      <div class="section-title"><span class="bar"></span>Diagnostic Charts</div>
+      <div class="section-sub">184 PAGES · 46 SIGNALS ANALYZED</div>
+    </div>
+    <div class="charts-row">
+
+      <div class="chart-card">
+        <div class="chart-title">Category Scores<span>Weighted 0–100 scale, benchmarked to a score of 70</span></div>
+        <div class="bar-chart">
+          <div class="bar-row"><div class="lbl">Technical SEO</div><div class="bar-track"><div class="bar-fill" style="width:68%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div><div class="val">68</div></div>
+          <div class="bar-row"><div class="lbl">On-Page SEO</div><div class="bar-track"><div class="bar-fill" style="width:81%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div><div class="val">81</div></div>
+          <div class="bar-row"><div class="lbl">Local SEO</div><div class="bar-track"><div class="bar-fill" style="width:54%; background:linear-gradient(90deg,var(--red),var(--amber));"></div></div><div class="val">54</div></div>
+          <div class="bar-row"><div class="lbl">Performance</div><div class="bar-track"><div class="bar-fill" style="width:59%; background:linear-gradient(90deg,var(--red),var(--amber));"></div></div><div class="val">59</div></div>
+          <div class="bar-row"><div class="lbl">Accessibility</div><div class="bar-track"><div class="bar-fill" style="width:77%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div><div class="val">77</div></div>
+          <div class="bar-row"><div class="lbl">Security</div><div class="bar-track"><div class="bar-fill" style="width:88%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div><div class="val">88</div></div>
+          <div class="bar-row"><div class="lbl">Off-Page</div><div class="bar-track"><div class="bar-fill" style="width:63%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div><div class="val">63</div></div>
+          <div class="bar-row"><div class="lbl">UX / Conversion</div><div class="bar-track"><div class="bar-fill" style="width:70%; background:linear-gradient(90deg,var(--blue),var(--cyan));"></div></div><div class="val">70</div></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">Issues by Severity<span>112 total issues detected sitewide</span></div>
+        <div class="donut-wrap">
+          <svg width="150" height="150" viewBox="0 0 150 150">
+            <circle cx="75" cy="75" r="58" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="20"/>
+            <!-- Critical 12% -->
+            <circle cx="75" cy="75" r="58" fill="none" stroke="#fb5b6f" stroke-width="20"
+              stroke-dasharray="43.7 364.4" stroke-dashoffset="0" transform="rotate(-90 75 75)"/>
+            <!-- High 27% -->
+            <circle cx="75" cy="75" r="58" fill="none" stroke="#fbbf24" stroke-width="20"
+              stroke-dasharray="98.4 364.4" stroke-dashoffset="-43.7" transform="rotate(-90 75 75)"/>
+            <!-- Medium 38% -->
+            <circle cx="75" cy="75" r="58" fill="none" stroke="#3b82f6" stroke-width="20"
+              stroke-dasharray="138.5 364.4" stroke-dashoffset="-142.1" transform="rotate(-90 75 75)"/>
+            <!-- Low 23% -->
+            <circle cx="75" cy="75" r="58" fill="none" stroke="#22d3ee" stroke-width="20"
+              stroke-dasharray="83.8 364.4" stroke-dashoffset="-280.6" transform="rotate(-90 75 75)"/>
+            <text x="75" y="70" text-anchor="middle" fill="#f4f7ff" font-family="Space Grotesk" font-weight="700" font-size="26">112</text>
+            <text x="75" y="90" text-anchor="middle" fill="#6b7593" font-family="JetBrains Mono" font-size="10">ISSUES</text>
+          </svg>
+          <div class="donut-legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#fb5b6f;"></span>Critical<b>13</b></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#fbbf24;"></span>High<b>30</b></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#3b82f6;"></span>Medium<b>43</b></div>
+            <div class="legend-item"><span class="legend-dot" style="background:#22d3ee;"></span>Low<b>26</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">Site Health Pulse<span>Core Web Vitals + crawl health</span></div>
+        <div class="health-wrap">
+          <svg width="150" height="150" viewBox="0 0 150 150">
+            <circle cx="75" cy="75" r="58" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="16"/>
+            <circle cx="75" cy="75" r="58" fill="none" stroke="url(#healthGrad)" stroke-width="16"
+              stroke-dasharray="364.4" stroke-dashoffset="131.2" stroke-linecap="round" transform="rotate(-90 75 75)"/>
+            <defs>
+              <linearGradient id="healthGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#fbbf24"/>
+                <stop offset="100%" stop-color="#34d399"/>
+              </linearGradient>
+            </defs>
+            <text x="75" y="70" text-anchor="middle" fill="#f4f7ff" font-family="Space Grotesk" font-weight="700" font-size="24">64%</text>
+            <text x="75" y="90" text-anchor="middle" fill="#6b7593" font-family="JetBrains Mono" font-size="10">HEALTHY</text>
+          </svg>
+          <div class="health-stats">
+            <div class="hstat"><div class="n" style="color:var(--amber);">3.1s</div><div class="l">LCP</div></div>
+            <div class="hstat"><div class="n" style="color:var(--green);">0.06</div><div class="l">CLS</div></div>
+            <div class="hstat"><div class="n" style="color:var(--red);">412ms</div><div class="l">INP</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- PROBLEMS + ACTIONS -->
+  <div class="lower-row">
+
+    <div class="problems-card">
+      <div class="section-title" style="font-size:16px;"><span class="bar"></span>Top Problems</div>
+      <div class="problem-list">
+
+        <div class="problem-item">
+          <span class="prio-badge prio-critical">CRITICAL</span>
+          <div>
+            <div class="problem-title">Google Business Profile unclaimed &amp; NAP inconsistent</div>
+            <div class="problem-why">Name/address/phone mismatches across 6 directories are actively suppressing local map-pack rankings.</div>
+          </div>
+          <div class="impact-tag">−34% local visibility</div>
+        </div>
+
+        <div class="problem-item">
+          <span class="prio-badge prio-critical">CRITICAL</span>
+          <div>
+            <div class="problem-title">Mobile LCP is 3.1s on product pages</div>
+            <div class="problem-why">Unoptimized hero images and render-blocking scripts push the largest category (product pages) past Google's "good" threshold.</div>
+          </div>
+          <div class="impact-tag">62% of traffic is mobile</div>
+        </div>
+
+        <div class="problem-item">
+          <span class="prio-badge prio-high">HIGH</span>
+          <div>
+            <div class="problem-title">41 product pages missing meta descriptions</div>
+            <div class="problem-why">Search snippets are auto-generated, reducing click-through rate on high-intent product queries.</div>
+          </div>
+          <div class="impact-tag">41 pages affected</div>
+        </div>
+
+        <div class="problem-item">
+          <span class="prio-badge prio-high">HIGH</span>
+          <div>
+            <div class="problem-title">No schema markup on product or review pages</div>
+            <div class="problem-why">Missing structured data forfeits star-rating rich results, a proven CTR lift in furniture retail SERPs.</div>
+          </div>
+          <div class="impact-tag">0 rich results live</div>
+        </div>
+
+        <div class="problem-item">
+          <span class="prio-badge prio-medium">MEDIUM</span>
+          <div>
+            <div class="problem-title">Checkout flow requires 5 steps to complete</div>
+            <div class="problem-why">Competitor benchmarks average 3 steps; each extra step correlates with meaningful cart abandonment.</div>
+          </div>
+          <div class="impact-tag">Conversion drag</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="actions-card">
+      <div class="section-title" style="font-size:16px;"><span class="bar"></span>Recommended Actions</div>
+      <div class="actions-list">
+        <div class="action-item"><div class="action-num">1</div><div class="action-text">Claim &amp; standardize <b>Google Business Profile</b> and fix NAP across all directories.</div></div>
+        <div class="action-item"><div class="action-num">2</div><div class="action-text">Compress and lazy-load hero images to bring <b>mobile LCP under 2.5s</b>.</div></div>
+        <div class="action-item"><div class="action-num">3</div><div class="action-text">Write unique meta descriptions for the <b>41 flagged product pages</b>.</div></div>
+        <div class="action-item"><div class="action-num">4</div><div class="action-text">Implement <b>Product &amp; Review schema</b> to unlock star-rating rich results.</div></div>
+        <div class="action-item"><div class="action-num">5</div><div class="action-text">Reduce checkout to <b>3 steps</b> and add a guest-checkout option.</div></div>
+        <div class="action-item"><div class="action-num">6</div><div class="action-text">Build 8–10 local backlinks from home &amp; garden industry sites this quarter.</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CTA -->
+  <div class="cta">
+    <div class="cta-left">
+      <h2>Ready to turn these opportunities into measurable growth?</h2>
+      <p>This sample shows what a full Signal Peak audit uncovers in minutes. Your real report will map every fix to projected traffic, ranking, and revenue impact.</p>
+    </div>
+    <button class="cta-btn">Discuss Your Website →</button>
+  </div>
+
+  <div class="footer-note">SAMPLE REPORT · GENERATED FOR DEMONSTRATION PURPOSES · ALL DATA FICTIONAL · SIGNAL PEAK DIGITAL</div>
+
+</div>
+</body>
+</html>
