@@ -157,39 +157,62 @@ export function Sparkline({ points, width = 130, height = 34, color = 'var(--bra
 }
 
 // ---- premium audit scorecard (health-style: higher is always better) ----
+//
+// Colour grading: green=Good, yellow=Needs Improvement, orange=Important
+// Issue, red=Critical Issue, gray=Not Applicable/Not Verified - a category
+// or check that could not be measured is never shown as if it scored 0 or
+// 100.
 
-export function healthBand(score) {
-  if (score === null || score === undefined) return { key: 'unknown', label: 'Not measured' }
+export function healthBand(score, applicable = true) {
+  if (!applicable) return { key: 'unknown', label: 'Not Applicable' }
+  if (score === null || score === undefined) return { key: 'unknown', label: 'Not Verified' }
   if (score >= 85) return { key: 'green', label: 'Good' }
-  if (score >= 70) return { key: 'yellow', label: 'Fair' }
-  if (score >= 50) return { key: 'orange', label: 'Needs work' }
-  return { key: 'red', label: 'Poor' }
+  if (score >= 70) return { key: 'yellow', label: 'Needs Improvement' }
+  if (score >= 50) return { key: 'orange', label: 'Important Issue' }
+  return { key: 'red', label: 'Critical Issue' }
 }
 
-export function BandPill({ score }) {
-  const b = healthBand(score)
+export function BandPill({ score, applicable = true }) {
+  const b = healthBand(score, applicable)
   return <span className={`band-pill ${b.key}`}>{b.label}</span>
 }
 
-export function CategoryScorecards({ categories }) {
+export function CategoryScorecards({ categories, onSelect, selected }) {
   return (
     <div className="grid grid-4">
       {(categories || []).map((c) => {
-        const b = healthBand(c.health)
+        const applicable = c.applicable !== false
+        const b = healthBand(c.health, applicable)
         return (
-          <div key={c.category} className="scorecard-tile">
+          <div
+            key={c.category}
+            className={`scorecard-tile${onSelect ? ' clickable' : ''}${selected === c.category ? ' selected' : ''}`}
+            onClick={onSelect ? () => onSelect(c.category) : undefined}
+            role={onSelect ? 'button' : undefined}
+            tabIndex={onSelect ? 0 : undefined}
+          >
             <div className="top">
               <span className="name">{c.label}</span>
-              <BandPill score={c.health} />
+              <BandPill score={c.health} applicable={applicable} />
             </div>
-            <div className="score">
-              {c.health}
-              <span className="den">/100</span>
-            </div>
-            <div className="progress">
-              <div className={`bar ${b.key === 'green' ? 'ok' : b.key === 'red' ? 'danger' : b.key}`} style={{ width: `${c.health}%` }} />
-            </div>
-            {c.why_it_matters && <p className="why">{c.why_it_matters}</p>}
+            {applicable ? (
+              <>
+                <div className="score">
+                  {c.health}
+                  <span className="den">/100</span>
+                </div>
+                <div className="progress">
+                  <div className={`bar ${b.key === 'green' ? 'ok' : b.key === 'red' ? 'danger' : b.key}`} style={{ width: `${c.health}%` }} />
+                </div>
+              </>
+            ) : (
+              <div className="score muted" style={{ fontSize: '1.4em' }}>N/A</div>
+            )}
+            {applicable ? (
+              c.why_it_matters && <p className="why">{c.why_it_matters}</p>
+            ) : (
+              c.not_applicable_reason && <p className="why">{c.not_applicable_reason}</p>
+            )}
           </div>
         )
       })}

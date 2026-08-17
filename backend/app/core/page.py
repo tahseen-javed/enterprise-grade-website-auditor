@@ -154,9 +154,18 @@ def classify_page(url: str, link_text: str = "", is_home: bool = False) -> str:
     path = re.sub(r"^https?://[^/]+", "", url.lower())
     if path in ("", "/"):
         return "homepage"
+    # Word-boundary matching, not a raw substring check - "location" must
+    # appear as its own path segment/word, so "/numbers/allocations/" (a
+    # real IANA URL) does not get misclassified as a "locations" page just
+    # because "allocations" happens to contain "location".
+    path_words = re.sub(r"[/_-]+", " ", path)
     for ptype, keys in PAGE_TYPE_PATTERNS:
         for k in keys:
-            if k in path or re.search(rf"\b{re.escape(k.replace('-', ' '))}\b", link_text.lower()):
+            key_pattern = re.escape(k.replace("-", " "))
+            if (
+                re.search(rf"\b{key_pattern}\b", path_words)
+                or re.search(rf"\b{key_pattern}\b", link_text.lower())
+            ):
                 return ptype
     if any(k in haystack for k in ("blog", "news", "article", "post")):
         return "blog"

@@ -268,28 +268,34 @@ def lead_tier(
 
 
 # --------------------------------------------------------------------------
-# Premium audit scorecard (Overall / Technical SEO / On-Page SEO /
-# Off-Page & Authority / Performance / Accessibility / Security / UX /
-# Conversion). Purely additive: built on top of the same findings used for
-# the opportunity score above, bucketed differently for reporting. Never
+# Premium audit scorecard (Overall / Technical SEO / On-Page SEO / Local SEO /
+# Off-Page & Authority / Performance / Accessibility / Security /
+# UX & Conversion). Purely additive: built on top of the same findings used
+# for the opportunity score above, bucketed differently for reporting. Never
 # changes `compute_score(findings, weights)`'s legacy two-argument behaviour,
 # never changes a Finding's own `.category`, and never feeds back into
 # lead tiering or outreach.
+#
+# UX and Conversion are reported as one combined category here (a business
+# owner cares about one question - "is this site easy to use and does it get
+# me enquiries" - not two separate scores), even though the legacy
+# opportunity-scoring categories above keep them apart.
 # --------------------------------------------------------------------------
 
 AUDIT_CATEGORIES = [
-    "technical", "onpage", "offpage", "performance", "accessibility", "security", "ux", "conversion",
+    "technical", "onpage", "local_seo", "offpage", "performance",
+    "accessibility", "security", "ux_conversion",
 ]
 
 AUDIT_CATEGORY_LABELS: Dict[str, str] = {
     "technical": "Technical SEO",
     "onpage": "On-Page SEO",
+    "local_seo": "Local SEO",
     "offpage": "Off-Page & Authority",
     "performance": "Performance",
     "accessibility": "Accessibility",
     "security": "Security",
-    "ux": "UX",
-    "conversion": "Conversion",
+    "ux_conversion": "UX & Conversion",
 }
 
 AUDIT_CATEGORY_WHY: Dict[str, str] = {
@@ -297,6 +303,9 @@ AUDIT_CATEGORY_WHY: Dict[str, str] = {
                 "it can affect organic visibility.",
     "onpage": "Titles, descriptions, headings and social tags are what search engines and shared "
              "links show first, driving click-through before a visitor ever reaches the page.",
+    "local_seo": "For a business that serves customers in a physical area, showing up in local "
+                "search and map results depends on address, service-area and business details that "
+                "search engines can find and verify - separate from general organic SEO.",
     "offpage": "External signals - citations, linked social presence, structured entity data - are "
               "part of how search engines and visitors judge a business's credibility beyond its "
               "own site.",
@@ -306,17 +315,18 @@ AUDIT_CATEGORY_WHY: Dict[str, str] = {
                      "users, low-vision users - and carry legal risk in many jurisdictions.",
     "security": "Missing security headers and unencrypted connections expose visitors to real risk "
                "and are flagged by browsers, which damages trust.",
-    "ux": "A site that is hard to use on a phone or navigate loses visitors regardless of how good "
-         "the content is.",
-    "conversion": "Every visitor who cannot find a way to make contact or trust the business is a "
-                  "lost enquiry, regardless of how much traffic the site gets.",
+    "ux_conversion": "A site that is hard to use, unclear about what it offers, or gives visitors no "
+                     "obvious way to make contact loses real enquiries, regardless of how much "
+                     "traffic it gets.",
 }
 
 # Default weights for the premium scorecard's overall score. Independent of
-# the outreach-opportunity WEIGHTS_DEFAULTS in settings.py.
+# the outreach-opportunity WEIGHTS_DEFAULTS in settings.py. Sums to 100 for
+# readability (weight = percentage of the overall score) but is not required
+# to - compute_score normalises by whatever total is active.
 AUDIT_WEIGHTS_DEFAULTS: Dict[str, int] = {
-    "technical": 15, "onpage": 15, "offpage": 5, "performance": 15,
-    "accessibility": 10, "security": 15, "ux": 15, "conversion": 10,
+    "technical": 13, "onpage": 13, "local_seo": 10, "offpage": 5, "performance": 13,
+    "accessibility": 9, "security": 13, "ux_conversion": 24,
 }
 
 # Every finding code from the six legacy checks (check_technical, check_mobile,
@@ -357,38 +367,37 @@ LEGACY_CODE_TO_AUDIT_CATEGORY: Dict[str, str] = {
     "heavy_page": "performance",
     "many_scripts": "performance",
     "pagespeed_low": "performance",
-    # ux (mobile experience + navigation)
-    "missing_viewport": "ux",
-    "viewport_not_responsive": "ux",
-    "zoom_disabled": "ux",
-    "fixed_width_layout": "ux",
-    "small_mobile_text": "ux",
-    "no_mobile_tap_to_call": "ux",
-    "legacy_plugin_content": "ux",
-    "no_mobile_menu": "ux",
-    "minimal_navigation": "ux",
-    # conversion (CTAs, trust/proof, contact & business info)
-    "no_primary_cta_above_fold": "conversion",
-    "no_phone_cta": "conversion",
-    "no_contact_form": "conversion",
-    "no_booking_cta": "conversion",
-    "no_quote_cta": "conversion",
-    "no_email_cta": "conversion",
-    "no_contact_page": "conversion",
-    "weak_cta_language": "conversion",
-    "no_testimonials": "conversion",
-    "reviews_not_structured": "conversion",
-    "no_credentials": "conversion",
-    "no_portfolio": "conversion",
-    "no_about_page": "conversion",
-    "no_phone_on_site": "conversion",
-    "phone_not_on_homepage": "conversion",
-    "no_email_on_site": "conversion",
-    "no_address": "conversion",
-    "no_opening_hours": "conversion",
-    "contact_hard_to_find": "conversion",
-    "no_website_detected": "conversion",
-    "social_profile_only": "conversion",
+    # ux & conversion (mobile experience, navigation, CTAs, trust/proof, contact)
+    "missing_viewport": "ux_conversion",
+    "viewport_not_responsive": "ux_conversion",
+    "zoom_disabled": "ux_conversion",
+    "fixed_width_layout": "ux_conversion",
+    "small_mobile_text": "ux_conversion",
+    "no_mobile_tap_to_call": "ux_conversion",
+    "legacy_plugin_content": "ux_conversion",
+    "no_mobile_menu": "ux_conversion",
+    "minimal_navigation": "ux_conversion",
+    "no_primary_cta_above_fold": "ux_conversion",
+    "no_phone_cta": "ux_conversion",
+    "no_contact_form": "ux_conversion",
+    "no_booking_cta": "ux_conversion",
+    "no_quote_cta": "ux_conversion",
+    "no_email_cta": "ux_conversion",
+    "no_contact_page": "ux_conversion",
+    "weak_cta_language": "ux_conversion",
+    "no_testimonials": "ux_conversion",
+    "reviews_not_structured": "ux_conversion",
+    "no_credentials": "ux_conversion",
+    "no_portfolio": "ux_conversion",
+    "no_about_page": "ux_conversion",
+    "no_phone_on_site": "ux_conversion",
+    "phone_not_on_homepage": "ux_conversion",
+    "no_email_on_site": "ux_conversion",
+    "no_address": "ux_conversion",
+    "no_opening_hours": "ux_conversion",
+    "contact_hard_to_find": "ux_conversion",
+    "no_website_detected": "ux_conversion",
+    "social_profile_only": "ux_conversion",
     # off-page / authority
     "no_social_presence_linked": "offpage",
 }
@@ -439,10 +448,10 @@ CHECK_CATALOG: List[Dict[str, Any]] = [
     {"id": "twitter_card", "category": "onpage", "label": "Twitter/X card tag present", "fail_codes": ["onpage_missing_twitter_card"]},
     {"id": "duplicate_titles", "category": "onpage", "label": "No duplicate titles across crawled pages", "fail_codes": ["onpage_duplicate_titles"]},
 
-    {"id": "viewport", "category": "ux", "label": "Mobile viewport configured correctly", "fail_codes": ["missing_viewport", "viewport_not_responsive"]},
-    {"id": "tap_to_call", "category": "ux", "label": "Tap-to-call link present on the homepage", "fail_codes": ["no_mobile_tap_to_call"]},
-    {"id": "fixed_width", "category": "ux", "label": "No fixed-width layout wider than a phone screen", "fail_codes": ["fixed_width_layout"]},
-    {"id": "mobile_menu", "category": "ux", "label": "Mobile navigation pattern detected", "fail_codes": ["no_mobile_menu"]},
+    {"id": "viewport", "category": "ux_conversion", "label": "Mobile viewport configured correctly", "fail_codes": ["missing_viewport", "viewport_not_responsive"]},
+    {"id": "tap_to_call", "category": "ux_conversion", "label": "Tap-to-call link present on the homepage", "fail_codes": ["no_mobile_tap_to_call"]},
+    {"id": "fixed_width", "category": "ux_conversion", "label": "No fixed-width layout wider than a phone screen", "fail_codes": ["fixed_width_layout"]},
+    {"id": "mobile_menu", "category": "ux_conversion", "label": "Mobile navigation pattern detected", "fail_codes": ["no_mobile_menu"]},
 
     {"id": "alt_text", "category": "accessibility", "label": "Good image alt-text coverage", "fail_codes": ["low_alt_coverage"]},
     {"id": "lang", "category": "accessibility", "label": "Page language declared", "fail_codes": ["missing_lang"]},
@@ -455,50 +464,199 @@ CHECK_CATALOG: List[Dict[str, Any]] = [
     {"id": "compression", "category": "performance", "label": "Response is compressed", "fail_codes": ["perf_no_compression"]},
     {"id": "render_blocking", "category": "performance", "label": "No excessive render-blocking scripts", "fail_codes": ["perf_render_blocking_scripts"]},
 
-    {"id": "phone_cta", "category": "conversion", "label": "Clickable phone link present", "fail_codes": ["no_phone_cta"]},
-    {"id": "contact_form", "category": "conversion", "label": "Contact/enquiry form present", "fail_codes": ["no_contact_form"]},
-    {"id": "contact_page", "category": "conversion", "label": "Contact page present", "fail_codes": ["no_contact_page"]},
-    {"id": "testimonials", "category": "conversion", "label": "Testimonials/reviews present", "fail_codes": ["no_testimonials"]},
-    {"id": "credentials", "category": "conversion", "label": "Trust signals (licences/insurance/guarantees) present", "fail_codes": ["no_credentials"]},
-    {"id": "address", "category": "conversion", "label": "Business address published", "fail_codes": ["no_address"]},
+    {"id": "phone_cta", "category": "ux_conversion", "label": "Clickable phone link present", "fail_codes": ["no_phone_cta"]},
+    {"id": "contact_form", "category": "ux_conversion", "label": "Contact/enquiry form present", "fail_codes": ["no_contact_form"]},
+    {"id": "contact_page", "category": "ux_conversion", "label": "Contact page present", "fail_codes": ["no_contact_page"]},
+    {"id": "testimonials", "category": "ux_conversion", "label": "Testimonials/reviews present", "fail_codes": ["no_testimonials"]},
+    {"id": "credentials", "category": "ux_conversion", "label": "Trust signals (licences/insurance/guarantees) present", "fail_codes": ["no_credentials"]},
+    {"id": "address", "category": "ux_conversion", "label": "Business address published", "fail_codes": ["no_address"]},
 
     {"id": "social_profiles", "category": "offpage", "label": "Social profiles linked from the site", "fail_codes": ["offpage_no_social_profiles"]},
+
+    {"id": "local_business_schema", "category": "local_seo", "label": "LocalBusiness/Organization structured data present", "fail_codes": ["local_no_business_schema"]},
+    {"id": "local_address", "category": "local_seo", "label": "Business address published", "fail_codes": ["local_no_address_signal"]},
+    {"id": "local_map_or_gbp", "category": "local_seo", "label": "Map embed or Google Business Profile link present", "fail_codes": ["local_no_map_or_gbp_link"]},
+    {"id": "local_service_area", "category": "local_seo", "label": "Service-area or local landing-page content present", "fail_codes": ["local_no_service_area_content"]},
+    {"id": "local_hours", "category": "local_seo", "label": "Opening hours published", "fail_codes": ["local_no_opening_hours"]},
+    {"id": "local_reviews", "category": "local_seo", "label": "Reviews or testimonials present", "fail_codes": ["local_no_reviews_or_testimonials"]},
+    {"id": "local_reviews_structured", "category": "local_seo", "label": "Reviews marked up as structured data (Review/AggregateRating)", "fail_codes": ["local_reviews_not_structured"]},
+    {"id": "local_name_consistency", "category": "local_seo", "label": "Business name consistent between structured data and page content", "fail_codes": ["local_name_mismatch"]},
+]
+
+# Checks this engine can never measure without a paid third-party service or
+# a rendered browser. Always reported as "not verified" here - never
+# estimated or guessed (spec: accuracy rule).
+NOT_VERIFIED_CATALOG: List[Dict[str, str]] = [
+    {
+        "id": "color_contrast", "category": "accessibility",
+        "label": "Colour contrast meets WCAG guidelines",
+        "detail": "Requires a rendered page with computed styles; not measurable from static HTML/CSS.",
+    },
+    {
+        "id": "backlink_profile", "category": "offpage",
+        "label": "Backlink count and referring domains",
+        "detail": "Requires a paid third-party index (e.g. Ahrefs, Moz, Majestic, SEMrush); never estimated.",
+    },
+    {
+        "id": "domain_authority", "category": "offpage",
+        "label": "Domain authority / DR-style score",
+        "detail": "Proprietary to each vendor; never approximated.",
+    },
 ]
 
 
-def build_pass_fail_summary(findings: List[Finding]) -> Dict[str, Any]:
-    present = {f.code for f in findings}
-    passed: List[Dict[str, Any]] = []
-    failed: List[Dict[str, Any]] = []
+STATUS_PASS = "pass"
+STATUS_WARNING = "warning"
+STATUS_FAIL = "fail"
+STATUS_NOT_VERIFIED = "not_verified"
+STATUS_NOT_APPLICABLE = "not_applicable"
+
+# Display labels matching the premium report's colour grading:
+# green=Passed, yellow=Needs Improvement, red=Critical, gray=Not Verified/N-A.
+STATUS_LABELS: Dict[str, str] = {
+    STATUS_PASS: "Passed",
+    STATUS_WARNING: "Needs Improvement",
+    STATUS_FAIL: "Critical",
+    STATUS_NOT_VERIFIED: "Not Verified",
+    STATUS_NOT_APPLICABLE: "Not Applicable",
+}
+
+
+def build_check_results(
+    findings: List[Finding],
+    *,
+    category_applicability: Optional[Dict[str, bool]] = None,
+    applicability_reason: Optional[Dict[str, str]] = None,
+    pagespeed_measured: bool = False,
+) -> Dict[str, Any]:
+    """
+    Every catalogued check resolves to exactly one status - PASS, WARNING,
+    FAIL, NOT VERIFIED or NOT APPLICABLE - never a fabricated result for
+    something that was not actually measured (spec: accuracy rule).
+
+    A check FAILs when its worst matching finding is high-severity, WARNs
+    when medium/low, PASSes when none of its fail_codes fired, is NOT
+    APPLICABLE when its whole category was ruled inapplicable to this site
+    (e.g. Local SEO on a site with no location signals), and NOT VERIFIED
+    for the handful of things this engine can never measure without a paid
+    third-party service or a rendered browser.
+    """
+    applicability = category_applicability or {}
+    reasons = applicability_reason or {}
+    present: Dict[str, Finding] = {}
+    for f in findings:
+        present.setdefault(f.code, f)
+
+    results: List[Dict[str, Any]] = []
+
     for chk in CHECK_CATALOG:
+        cat = chk["category"]
+        if applicability.get(cat) is False:
+            results.append({
+                "id": chk["id"], "category": cat, "label": chk["label"],
+                "status": STATUS_NOT_APPLICABLE,
+                "detail": reasons.get(cat, "Not applicable to this website."),
+            })
+            continue
         hit = next((c for c in chk["fail_codes"] if c in present), None)
-        if hit:
-            failed.append({"id": chk["id"], "category": chk["category"], "code": hit})
+        if not hit:
+            results.append({
+                "id": chk["id"], "category": cat, "label": chk["label"],
+                "status": STATUS_PASS, "detail": "",
+            })
         else:
-            passed.append({"id": chk["id"], "category": chk["category"], "label": chk["label"]})
+            f = present[hit]
+            status = STATUS_FAIL if f.severity == "high" else STATUS_WARNING
+            results.append({
+                "id": chk["id"], "category": cat, "label": chk["label"],
+                "status": status, "detail": f.title,
+            })
+
+    for chk in NOT_VERIFIED_CATALOG:
+        cat = chk["category"]
+        if applicability.get(cat) is False:
+            results.append({
+                "id": chk["id"], "category": cat, "label": chk["label"],
+                "status": STATUS_NOT_APPLICABLE, "detail": reasons.get(cat, "Not applicable to this website."),
+            })
+        else:
+            results.append({
+                "id": chk["id"], "category": cat, "label": chk["label"],
+                "status": STATUS_NOT_VERIFIED, "detail": chk["detail"],
+            })
+
+    cwv_status: str
+    cwv_detail: str
+    if applicability.get("performance") is False:
+        cwv_status, cwv_detail = STATUS_NOT_APPLICABLE, reasons.get("performance", "Not applicable to this website.")
+    elif pagespeed_measured:
+        hit = present.get("pagespeed_low")
+        if hit:
+            cwv_status = STATUS_FAIL if hit.severity == "high" else STATUS_WARNING
+            cwv_detail = hit.title
+        else:
+            cwv_status, cwv_detail = STATUS_PASS, ""
+    else:
+        cwv_status = STATUS_NOT_VERIFIED
+        cwv_detail = "Configure a Google PageSpeed Insights API key in Settings to measure Core Web Vitals."
+    results.append({
+        "id": "core_web_vitals", "category": "performance",
+        "label": "Core Web Vitals / PageSpeed performance score",
+        "status": cwv_status, "detail": cwv_detail,
+    })
+
+    counts = {STATUS_PASS: 0, STATUS_WARNING: 0, STATUS_FAIL: 0, STATUS_NOT_VERIFIED: 0, STATUS_NOT_APPLICABLE: 0}
+    for r in results:
+        counts[r["status"]] += 1
+    evaluated = counts[STATUS_PASS] + counts[STATUS_WARNING] + counts[STATUS_FAIL]
+
     return {
-        "passed": passed,
-        "failed": failed,
-        "passed_count": len(passed),
-        "failed_count": len(failed),
-        "total_checked": len(CHECK_CATALOG),
+        "checks": results,
+        "passed": [r for r in results if r["status"] == STATUS_PASS],
+        "warnings": [r for r in results if r["status"] == STATUS_WARNING],
+        "failed": [r for r in results if r["status"] == STATUS_FAIL],
+        "not_verified": [r for r in results if r["status"] == STATUS_NOT_VERIFIED],
+        "not_applicable": [r for r in results if r["status"] == STATUS_NOT_APPLICABLE],
+        "passed_count": counts[STATUS_PASS],
+        "warning_count": counts[STATUS_WARNING],
+        "failed_count": counts[STATUS_FAIL],
+        "not_verified_count": counts[STATUS_NOT_VERIFIED],
+        "not_applicable_count": counts[STATUS_NOT_APPLICABLE],
+        "total_checked": evaluated,
+        "total_catalogued": len(results),
     }
 
 
 def build_scorecard(
-    findings: List[Finding], weights: Optional[Dict[str, int]] = None
+    findings: List[Finding],
+    weights: Optional[Dict[str, int]] = None,
+    *,
+    category_applicability: Optional[Dict[str, bool]] = None,
+    applicability_reason: Optional[Dict[str, str]] = None,
+    pagespeed_measured: bool = False,
 ) -> Dict[str, Any]:
     """
     The premium audit scorecard: Overall + Technical SEO + On-Page SEO +
-    Off-Page & Authority + Performance + Accessibility + Security + UX +
-    Conversion, all HIGHER-IS-BETTER (unlike the opportunity score above,
-    which is inverted for lead-gen prioritisation). Reuses `compute_score`'s
-    math over the additive AUDIT_CATEGORIES set via `audit_category_of`, so
-    it is built from the exact same findings without recomputing anything.
+    Local SEO + Off-Page & Authority + Performance + Accessibility +
+    Security + UX & Conversion, all HIGHER-IS-BETTER (unlike the opportunity
+    score above, which is inverted for lead-gen prioritisation). Reuses
+    `compute_score`'s math over the additive AUDIT_CATEGORIES set via
+    `audit_category_of`, so it is built from the exact same findings without
+    recomputing anything.
+
+    `category_applicability` (e.g. {"local_seo": False}) removes a category
+    from the weighted average entirely rather than scoring it 0 or 100 -
+    an inapplicable category must never move the overall score either way.
     """
     w = weights or AUDIT_WEIGHTS_DEFAULTS
+    applicability = category_applicability or {}
+    reasons = applicability_reason or {}
+
+    active_cats = [c for c in AUDIT_CATEGORIES if applicability.get(c) is not False]
+    active_weights = {c: w.get(c, 0) for c in active_cats}
+
     result = compute_score(
-        findings, w, categories=AUDIT_CATEGORIES,
+        findings, active_weights, categories=active_cats,
         category_of=audit_category_of, labels=AUDIT_CATEGORY_LABELS,
     )
     severity_counts = {"high": 0, "medium": 0, "low": 0}
@@ -513,7 +671,19 @@ def build_scorecard(
             **row,
             "score": row["health"],
             "why_it_matters": AUDIT_CATEGORY_WHY.get(c, ""),
+            "applicable": True,
         })
+    for c in AUDIT_CATEGORIES:
+        if applicability.get(c) is False:
+            categories.append({
+                "category": c,
+                "label": AUDIT_CATEGORY_LABELS.get(c, c.title()),
+                "weight": 0, "health": None, "opportunity": None, "contribution": 0,
+                "findings": 0, "deductions": 0, "score": None,
+                "why_it_matters": AUDIT_CATEGORY_WHY.get(c, ""),
+                "applicable": False,
+                "not_applicable_reason": reasons.get(c, "Not applicable to this website."),
+            })
     categories.sort(key=lambda r: AUDIT_CATEGORIES.index(r["category"]))
 
     return {
@@ -521,7 +691,10 @@ def build_scorecard(
         "categories": categories,
         "weights": result["weights"],
         "severity_counts": severity_counts,
-        "pass_fail": build_pass_fail_summary(findings),
+        "checks": build_check_results(
+            findings, category_applicability=applicability, applicability_reason=reasons,
+            pagespeed_measured=pagespeed_measured,
+        ),
     }
 
 
@@ -542,3 +715,151 @@ def has_clear_opportunity(
             "there is no strong, specific observation to open a conversation with."
         )
     return True, ""
+
+
+# --------------------------------------------------------------------------
+# Top priorities + structured executive summary, for the first page of the
+# premium report. Both are built entirely from the scorecard/findings that
+# were already computed above - nothing here is invented.
+# --------------------------------------------------------------------------
+
+
+def top_priorities(findings: List[Finding], n: int = 5) -> List[Dict[str, Any]]:
+    """
+    The N most important, evidence-backed issues across every premium
+    category. Spread across categories first (same diversity rule as
+    `select_problems`) so the list is not five variations of one problem,
+    then filled by impact.
+    """
+    scored = sorted(
+        [f for f in findings if f.deduction > 0],
+        key=lambda f: (SEVERITY_RANK.get(f.severity, 3), -f.deduction),
+    )
+    if not scored:
+        return []
+
+    chosen: List[Finding] = []
+    seen_cat: set = set()
+    for f in scored:
+        cat = audit_category_of(f)
+        if cat not in seen_cat:
+            chosen.append(f)
+            seen_cat.add(cat)
+        if len(chosen) >= n:
+            break
+    for f in scored:
+        if len(chosen) >= n:
+            break
+        if f not in chosen:
+            chosen.append(f)
+
+    chosen.sort(key=lambda f: (SEVERITY_RANK.get(f.severity, 3), -f.deduction))
+    out = []
+    for i, f in enumerate(chosen[:n]):
+        cat = audit_category_of(f)
+        out.append({
+            "rank": i + 1,
+            "code": f.code,
+            "category": cat,
+            "category_label": AUDIT_CATEGORY_LABELS.get(cat, cat.title()),
+            "severity": f.severity,
+            "priority": priority_for(f),
+            "title": f.title,
+            "detail": f.detail,
+            "why_it_matters": AUDIT_CATEGORY_WHY.get(cat, ""),
+            "recommendation": f.recommendation,
+            "impact_points": f.deduction,
+        })
+    return out
+
+
+# Plain-language sentence fragments used to build the "business impact" line
+# of the executive summary - one clause per category that actually has a
+# meaningful (medium/high severity) issue, never speculative revenue figures.
+_BUSINESS_IMPACT_BY_CATEGORY: Dict[str, str] = {
+    "technical": "search engines may struggle to fully crawl and index the site",
+    "onpage": "the site is less likely to appear for the searches that matter, and shared links look unpolished",
+    "local_seo": "the business is less likely to appear in local search and map results for nearby customers",
+    "offpage": "the site has less credibility signal to search engines and visitors than it could",
+    "performance": "visitors on slower connections may leave before the page finishes loading",
+    "accessibility": "some real visitors cannot use the site properly, which also carries legal risk in many places",
+    "security": "visitors' browsers may warn them the connection is not fully secure, which damages trust",
+    "ux_conversion": "interested visitors may leave without ever making contact",
+}
+
+
+def build_executive_summary(
+    scorecard: Dict[str, Any], findings: List[Finding], priorities: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    A structured, plain-language summary for the first page of the report:
+    a headline, what's working, the top problems, the biggest opportunities,
+    the likely business impact, and what to do next. Every field is derived
+    from the scorecard/findings/priorities already computed - nothing here
+    is invented to fill a gap.
+    """
+    categories = scorecard.get("categories", [])
+    checks = scorecard.get("checks", {})
+
+    working = [
+        c["label"] for c in sorted(
+            [c for c in categories if c.get("applicable", True) and c.get("score") is not None],
+            key=lambda c: -(c["score"] or 0),
+        )
+        if c["score"] >= 85
+    ][:4]
+
+    top_problems = [p["title"] for p in priorities[:3]]
+
+    opportunity_cats = sorted(
+        [c for c in categories if c.get("applicable", True) and c.get("score") is not None and c["score"] < 70],
+        key=lambda c: (c["score"] or 0),
+    )
+    biggest_opportunities = [f"{c['label']} ({c['score']}/100)" for c in opportunity_cats[:3]]
+
+    impacted_cats: List[str] = []
+    for f in findings:
+        if f.deduction > 0 and f.severity in ("high", "medium"):
+            cat = audit_category_of(f)
+            if cat not in impacted_cats:
+                impacted_cats.append(cat)
+    impact_sentences = [
+        _BUSINESS_IMPACT_BY_CATEGORY[c] for c in AUDIT_CATEGORIES
+        if c in impacted_cats and c in _BUSINESS_IMPACT_BY_CATEGORY
+    ][:3]
+    business_impact = (
+        ("Left unaddressed, " + "; ".join(impact_sentences) + ".")
+        if impact_sentences
+        else "No high-impact issues were found that are likely to cost the business enquiries."
+    )
+
+    next_steps = [p["recommendation"] for p in priorities if p.get("recommendation")][:5]
+
+    overall = scorecard.get("overall_score")
+    if overall is None:
+        headline = "This site could not be fully audited."
+    elif overall >= 85:
+        headline = f"This site is in strong shape overall, scoring {overall}/100."
+    elif overall >= 70:
+        headline = f"This site is in reasonable shape overall, scoring {overall}/100, with room to improve."
+    elif overall >= 50:
+        headline = f"This site scores {overall}/100 overall — several important issues are holding it back."
+    else:
+        headline = f"This site scores {overall}/100 overall — a number of significant issues need attention."
+
+    return {
+        "headline": headline,
+        "whats_working": working,
+        "top_problems": top_problems,
+        "biggest_opportunities": biggest_opportunities,
+        "business_impact": business_impact,
+        "next_steps": next_steps,
+        "checks_summary": {
+            "passed": checks.get("passed_count", 0),
+            "warnings": checks.get("warning_count", 0),
+            "critical": checks.get("failed_count", 0),
+            "not_verified": checks.get("not_verified_count", 0),
+            "not_applicable": checks.get("not_applicable_count", 0),
+            "total": checks.get("total_checked", 0),
+        },
+    }

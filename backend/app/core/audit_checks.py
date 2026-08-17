@@ -113,6 +113,10 @@ SERVICE_AREA_WORDS = [
 
 _RE_PX = re.compile(r"(?:^|[;{\s])(?:min-)?width\s*:\s*(\d{3,5})px", re.I)
 _RE_FONT_PX = re.compile(r"font-size\s*:\s*(\d{1,2}(?:\.\d+)?)px", re.I)
+_RE_ADDRESS = re.compile(
+    r"\b\d{1,5}\s+[A-Za-z][A-Za-z.\- ]{3,40}\s+(street|st|road|rd|avenue|ave|lane|ln|"
+    r"drive|dr|way|court|ct|boulevard|blvd|place|pl|parade|terrace)\b", re.I,
+)
 
 
 def _blob(pages: List[ParsedPage], limit: int = 60000) -> str:
@@ -893,10 +897,7 @@ def check_contact(crawl: CrawlResult, extracted: Any = None) -> tuple:
         for p in pages for b in p.jsonld for k in b.keys()
     )
     # A street address pattern, or address structured data.
-    addr_pattern = bool(
-        re.search(r"\b\d{1,5}\s+[A-Za-z][A-Za-z.\- ]{3,40}\s+(street|st|road|rd|avenue|ave|lane|ln|"
-                  r"drive|dr|way|court|ct|boulevard|blvd|place|pl|parade|terrace)\b", text_all, re.I)
-    )
+    addr_pattern = bool(_RE_ADDRESS.search(text_all))
 
     footer_has_contact = any(
         ("tel:" in (p.footer_html or "").lower() or "mailto:" in (p.footer_html or "").lower())
@@ -1532,13 +1533,241 @@ def check_performance_extra(crawl: CrawlResult) -> tuple:
     return facts, findings
 
 
+# ==========================================================================
+# LOCAL SEO  (new, additive category - only evaluated when the crawled site
+# shows at least one genuine signal of being a physical, location-based
+# business. A site with zero such signals is marked Not Applicable rather
+# than penalised - auditing a SaaS or e-commerce site as if it were a local
+# shop would invent a problem that was never real.)
+# ==========================================================================
+
+_MAP_LINK_RE = re.compile(
+    r"(google\.com/maps|maps\.google\.|goo\.gl/maps|g\.page/|business\.google\.com)", re.I
+)
+
+# Deliberately narrower than the shared SERVICE_AREA_WORDS list (which also
+# feeds check_content's much lower-stakes "no_service_area" content-clarity
+# nudge): generic phrases like "serving" or "we cover" show up incidentally
+# on all kinds of institutional/global sites (e.g. a standards body writing
+# about regional registries), which would wrongly flag them as a physical,
+# location-based local business. These phrases are specific enough that a
+# genuine local business is the only realistic source.
+_LOCAL_SERVICE_AREA_RE = re.compile(
+    r"\b(areas we serve|service area[s]?|areas covered|locations we serve|our service area)\b", re.I
+)
+
+
+def check_local_seo(crawl: CrawlResult) -> tuple:
+    """
+    Evaluates local/map-pack signals: LocalBusiness structured data, a
+    published address, a map or Google Business Profile link, service-area
+    content, opening hours, and reviews.
+
+    Applicability is decided from *positive* on-site evidence only (never
+    from a guess about what kind of business this is): if none of
+    LocalBusiness/Organization schema, an address, a map/GBP link, or
+    service-area content appear anywhere on the crawled pages, the whole
+    category is reported Not Applicable via `facts["applicable"] = False`
+    and no findings (no deductions) are produced.
+    """
+    findings: List[Finding] = []
+    facts: Dict[str, Any] = {}
+    pages = crawl.pages
+    home = crawl.homepage
+    if home is None or not pages:
+        return facts, findings
+
+    text_all = _blob(pages)
+    types = crawl.types_found()
+
+    local_schema_blocks = [b for p in pages for b in jsonld_of_type(p, "LocalBusiness", "Organization")]
+    schema_with_address = [b for b in local_schema_blocks if b.get("address")]
+    schema_name = next((b.get("name") for b in local_schema_blocks if b.get("name")), "")
+
+    addr_pattern = bool(_RE_ADDRESS.search(text_all))
+    has_address_signal = addr_pattern or bool(schema_with_address)
+
+    map_link = (
+        any(_MAP_LINK_RE.search(u) for p in pages for u in p.iframes)
+        or any(_MAP_LINK_RE.search(l.href) for p in pages for l in p.links if l.href)
+    )
+
+    service_area_hit = _LOCAL_SERVICE_AREA_RE.search(text_all)
+    locations_page = "locations" in types
+    has_service_area_signal = bool(service_area_hit) or locations_page
+
+    hours_hit = _any_word(text_all, HOURS_WORDS)
+    hours_schema = any("openinghours" in str(k).lower() for p in pages for b in p.jsonld for k in b.keys())
+    has_hours_signal = bool(hours_hit) or hours_schema
+
+    testimonial_hit = _any_word(text_all, TESTIMONIAL_WORDS)
+    review_schema = any(jsonld_of_type(p, "Review", "AggregateRating") for p in pages)
+    has_reviews_signal = bool(testimonial_hit) or "testimonials" in types or review_schema
+
+    # A bare "Organization" block (with no address) is far too common on any
+    # commercial site - SaaS, e-commerce, purely online businesses all use it
+    # - to count on its own as evidence of being a physical, location-based
+    # business. An address-bearing schema block does count, same as the
+    # other three genuinely location-specific signals.
+    core_signals = [bool(schema_with_address), has_address_signal, map_link, has_service_area_signal]
+    signal_count = sum(1 for s in core_signals if s)
+
+    facts.update({
+        "local_business_schema": bool(local_schema_blocks),
+        "schema_has_address": bool(schema_with_address),
+        "address_signal": has_address_signal,
+        "map_or_gbp_link": map_link,
+        "service_area_signal": has_service_area_signal,
+        "opening_hours_signal": has_hours_signal,
+        "reviews_signal": has_reviews_signal,
+        "reviews_structured": review_schema,
+        "signal_count": signal_count,
+    })
+
+    # A single weak signal (most commonly: any address text anywhere on a
+    # multi-page site, which plenty of non-local organisations publish for a
+    # registered office) is not, on its own, good enough evidence to grade a
+    # site as if it were a local business. Structured address data is the
+    # one exception - a site does not accidentally publish LocalBusiness/
+    # Organization JSON-LD with an address field, so that alone is treated
+    # as sufficient, deliberate evidence.
+    applicable = bool(schema_with_address) or signal_count >= 2
+    facts["applicable"] = applicable
+    if not applicable:
+        facts["reason"] = (
+            "No address, map or Google Business Profile link, service-area content, or "
+            "LocalBusiness/Organization structured data was found on the crawled pages (or only one "
+            "weak signal was), so this does not appear to be a physical, location-based business. "
+            "Local SEO is reported as Not Applicable rather than scored - if this is in fact a local "
+            "business, publishing this information more clearly would also be the fastest way to "
+            "improve here."
+        )
+        return facts, findings
+
+    if not local_schema_blocks:
+        findings.append(_f(
+            code="local_no_business_schema", category="local_seo", display_category="local_seo",
+            severity="high",
+            title="No LocalBusiness or Organization structured data was found",
+            detail="Search engines rely on LocalBusiness/Organization JSON-LD - not just visible "
+                   "text - to confirm a business's name, address and category for local search "
+                   "and map results. None was found on the crawled pages.",
+            deduction=22, evidence={"pages_checked": len(pages)},
+            recommendation="Add LocalBusiness JSON-LD structured data with the business name, "
+                           "address, phone number and category.",
+        ))
+
+    if not has_address_signal:
+        findings.append(_f(
+            code="local_no_address_signal", category="local_seo", display_category="local_seo",
+            severity="high",
+            title="No business address was found on the site",
+            detail=f"No street address text and no structured-data address field were found "
+                   f"across {len(pages)} crawled pages.",
+            deduction=20, evidence={"pages_checked": len(pages)},
+            recommendation="Publish the full trading address on the contact page (and in "
+                           "LocalBusiness structured data).",
+        ))
+    elif local_schema_blocks and not schema_with_address:
+        findings.append(_f(
+            code="local_address_not_structured", category="local_seo", display_category="local_seo",
+            severity="low",
+            title="The business address is published but not in structured data",
+            detail="An address appears on the page, but the LocalBusiness/Organization structured "
+                   "data has no address field, so search engines cannot confirm it as reliably as "
+                   "they could from structured data.",
+            deduction=6, evidence={},
+            recommendation="Add the address as a structured \"address\" field in the LocalBusiness "
+                           "JSON-LD, not just as visible text.",
+        ))
+
+    if not map_link:
+        findings.append(_f(
+            code="local_no_map_or_gbp_link", category="local_seo", display_category="local_seo",
+            severity="medium",
+            title="No map embed or Google Business Profile link was found",
+            detail="No embedded Google Map and no link to a Google Maps or Google Business Profile "
+                   "listing was found, which makes it harder for visitors (and search engines) to "
+                   "confirm the business's exact location.",
+            deduction=12, evidence={},
+            recommendation="Embed a Google Map on the contact page and link the Google Business "
+                           "Profile listing.",
+        ))
+
+    if not has_service_area_signal:
+        findings.append(_f(
+            code="local_no_service_area_content", category="local_seo", display_category="local_seo",
+            severity="medium",
+            title="The area(s) served are not clearly stated",
+            detail="No 'areas we serve' wording and no locations page were found, so it is unclear "
+                   "which towns or region the business actually covers.",
+            deduction=12, evidence={},
+            recommendation="Add a short 'areas we serve' section or a locations page naming the "
+                           "towns/region covered.",
+        ))
+
+    if not has_hours_signal:
+        findings.append(_f(
+            code="local_no_opening_hours", category="local_seo", display_category="local_seo",
+            severity="low",
+            title="Opening hours are not published",
+            detail="No opening-hours wording and no openingHours structured data were found.",
+            deduction=8, evidence={},
+            recommendation="Publish opening hours on the contact page and in structured data.",
+        ))
+
+    if not has_reviews_signal:
+        findings.append(_f(
+            code="local_no_reviews_or_testimonials", category="local_seo", display_category="local_seo",
+            severity="medium",
+            title="No reviews or testimonials were found",
+            detail="Reviews are one of the strongest local-search ranking and trust signals; none "
+                   "were found on the crawled pages.",
+            deduction=12, evidence={},
+            recommendation="Display recent customer reviews, and encourage Google Business Profile "
+                           "reviews specifically.",
+        ))
+    elif not review_schema:
+        findings.append(_f(
+            code="local_reviews_not_structured", category="local_seo", display_category="local_seo",
+            severity="low",
+            title="Reviews are shown but not marked up as structured data",
+            detail="Review or testimonial content appears on the site but no Review/"
+                   "AggregateRating structured data was found, so star ratings cannot show "
+                   "directly in search results.",
+            deduction=5, evidence={},
+            recommendation="Add Review/AggregateRating structured data so ratings can appear in "
+                           "search listings.",
+        ))
+
+    if schema_name:
+        name_lc = schema_name.strip().lower()
+        first_word = name_lc.split()[0] if name_lc.split() else ""
+        title_lc = (home.title or "").lower()
+        h1_lc = " ".join(home.h1).lower()
+        if first_word and first_word not in title_lc and first_word not in h1_lc:
+            findings.append(_f(
+                code="local_name_mismatch", category="local_seo", display_category="local_seo",
+                severity="low",
+                title="The business name in structured data does not appear on the homepage",
+                detail=f'Structured data names the business "{schema_name}", but that name was '
+                       f"not found in the homepage title or heading, which can make it harder for "
+                       f"search engines to match the two together.",
+                deduction=6, evidence={"schema_name": schema_name},
+                recommendation="Make sure the business name in structured data matches the name "
+                               "shown on the page.",
+            ))
+
+    return facts, findings
+
+
 def run_extra_checks(crawl: CrawlResult) -> tuple:
     """
     Additive premium checks: security, accessibility, on-page extras,
-    off-page/authority, performance extras. Kept entirely separate from
-    `run_all_checks`'s six legacy categories so existing opportunity-scoring
-    and outreach-tiering behaviour is unchanged; these feed the premium audit
-    scorecard only (see scoring.build_scorecard).
+    off-page/authority, performance extras, local SEO. Kept entirely
+    separate from `run_all_checks`'s six legacy categories so existing
+    opportunity-scoring and outreach-tiering behaviour is unchanged; these
+    feed the premium audit scorecard only (see scoring.build_scorecard).
     """
     facts: Dict[str, Dict[str, Any]] = {}
     findings: List[Finding] = []
@@ -1549,6 +1778,7 @@ def run_extra_checks(crawl: CrawlResult) -> tuple:
         ("onpage", check_onpage),
         ("offpage", check_offpage),
         ("performance_extra", check_performance_extra),
+        ("local_seo", check_local_seo),
     ):
         try:
             f, fi = fn(crawl)

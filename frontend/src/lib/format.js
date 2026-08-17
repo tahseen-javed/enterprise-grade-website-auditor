@@ -151,6 +151,17 @@ export const AUDIT_STATUS = {
   '': { label: '—', tone: 'neutral' },
 }
 
+// Per-check status (see backend scoring.STATUS_LABELS) - every catalogued
+// check resolves to exactly one of these, never a fabricated pass/fail for
+// something that was not actually measured.
+export const CHECK_STATUS = {
+  pass: { label: 'Passed', tone: 'ok' },
+  warning: { label: 'Needs Improvement', tone: 'warn' },
+  fail: { label: 'Critical', tone: 'danger' },
+  not_verified: { label: 'Not Verified', tone: 'neutral' },
+  not_applicable: { label: 'Not Applicable', tone: 'neutral' },
+}
+
 export const describe = (map, key, fallbackLabel) =>
   map[key] || { label: fallbackLabel || key || '—', tone: 'neutral' }
 
@@ -158,12 +169,12 @@ export const describe = (map, key, fallbackLabel) =>
 export const AUDIT_CATEGORY_LABELS = {
   technical: 'Technical SEO',
   onpage: 'On-Page SEO',
+  local_seo: 'Local SEO',
   offpage: 'Off-Page & Authority',
   performance: 'Performance',
   accessibility: 'Accessibility',
   security: 'Security',
-  ux: 'UX',
-  conversion: 'Conversion',
+  ux_conversion: 'UX & Conversion',
 }
 
 export function scoreTone(score) {

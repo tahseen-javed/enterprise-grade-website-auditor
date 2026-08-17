@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { api, downloadUrl } from '../lib/api'
 import {
-  AUDIT_CATEGORY_LABELS, AUDIT_STATUS, WEBSITE_STATUS, dateTime, describe, tierClass,
+  AUDIT_STATUS, CHECK_STATUS, WEBSITE_STATUS, dateTime, describe, tierClass,
 } from '../lib/format'
 import { useFetch } from '../lib/store'
 import { BandPill, CategoryScorecards, ScoreDial, SeverityBreakdown } from './charts'
 import { IconAlert, IconCheck, IconExternal, IconSparkle } from './icons'
 import { Alert, Badge, CopyButton, Drawer, Empty, ErrorState, KV, Progress, Skeleton } from './ui'
+
+const SEVERITY_LABEL = { high: 'Critical', medium: 'High priority', low: 'Warning' }
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 }
+const SEVERITY_TONE = (sev) => (sev === 'high' ? 'danger' : sev === 'medium' ? 'warn' : 'ok')
 
 export default function LeadDrawer({ leadId, onClose }) {
   const [tab, setTab] = useState('overview')
@@ -173,10 +177,16 @@ function Overview({ data }) {
 /* ------------------------------------------------------------------ */
 
 function ScorecardTab({ data }) {
+  const [activeCategory, setActiveCategory] = useState(null)
   const extra = data.audit?.extra || {}
   const sc = extra.scorecard || {}
-  const findings = extra.findings || []
-  const pf = sc.pass_fail || { passed: [], passed_count: 0, total_checked: 0 }
+  const priorities = extra.priorities || []
+  const summary = extra.executive_summary || {}
+  const checks = sc.checks || {
+    passed: [], warnings: [], failed: [], not_verified: [], not_applicable: [],
+    passed_count: 0, warning_count: 0, failed_count: 0, not_verified_count: 0,
+    not_applicable_count: 0, total_checked: 0,
+  }
 
   if (!sc.categories?.length) {
     return (
@@ -187,15 +197,24 @@ function ScorecardTab({ data }) {
     )
   }
 
-  const legacyProblems = data.audit?.problems || []
-  const severity = { high: 0, medium: 0, low: 0 }
-  for (const p of legacyProblems) if (p.severity in severity) severity[p.severity] += 1
-  for (const f of findings) if (f.severity in severity) severity[f.severity] += 1
-
+  // Every finding that feeds the scorecard - legacy-category findings (e.g.
+  // no_https) carry a server-computed `premium_category` alongside their own
+  // `category`, so this groups exactly the way the full HTML report does,
+  // not just the newer premium-only checks.
+  const allFindings = [...(extra.legacy_findings || []), ...(extra.findings || [])]
   const byCategory = {}
-  for (const f of findings) {
-    (byCategory[f.category] ||= []).push(f)
+  for (const f of allFindings) {
+    if (f.deduction <= 0) continue
+    const cat = f.premium_category || f.category
+    ;(byCategory[cat] ||= []).push(f)
   }
+  for (const items of Object.values(byCategory)) {
+    items.sort((a, b) => (SEVERITY_RANK[a.severity] ?? 3) - (SEVERITY_RANK[b.severity] ?? 3) || b.deduction - a.deduction)
+  }
+
+  const visibleCategories = activeCategory
+    ? sc.categories.filter((c) => c.category === activeCategory)
+    : sc.categories
 
   return (
     <div className="stack">
@@ -205,12 +224,12 @@ function ScorecardTab({ data }) {
           <div style={{ flex: 1, minWidth: 220 }}>
             <div className="row row-wrap" style={{ gap: 7, marginBottom: 10 }}>
               <BandPill score={sc.overall_score} />
-              <Badge tone="neutral">{pf.passed_count}/{pf.total_checked} checks passed</Badge>
+              <Badge tone="neutral">{checks.passed_count}/{checks.total_checked} checks passed</Badge>
+              {checks.failed_count > 0 && <Badge tone="danger">{checks.failed_count} critical</Badge>}
+              {checks.warning_count > 0 && <Badge tone="warn">{checks.warning_count} warnings</Badge>}
             </div>
-            <p className="small muted" style={{ margin: 0 }}>
-              This is a health score — higher is better, unlike the opportunity score on Overview.
-              Technical SEO, on-page SEO, off-page/authority, performance, accessibility, security,
-              UX and conversion are each scored independently, then weighted into the figure above.
+            <p className="small" style={{ margin: 0, color: 'var(--ink-2)' }}>
+              {summary.headline || 'This is a health score — higher is better, unlike the opportunity score on Overview.'}
             </p>
           </div>
         </div>
@@ -222,52 +241,69 @@ function ScorecardTab({ data }) {
         </a>
       )}
 
-      <div className="card">
-        <div className="card-head"><h2>Category scorecards</h2></div>
-        <div className="card-body">
-          <CategoryScorecards categories={sc.categories} />
+      <div className="grid grid-2">
+        <div className="card">
+          <div className="card-head"><h2>What's working well</h2></div>
+          <div className="card-body">
+            {summary.whats_working?.length ? (
+              <ul className="small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.9, color: 'var(--ink-2)' }}>
+                {summary.whats_working.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>No category currently scores in the "Good" range.</p>
+            )}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-head"><h2>Biggest opportunities</h2></div>
+          <div className="card-body">
+            {summary.biggest_opportunities?.length ? (
+              <ul className="small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.9, color: 'var(--ink-2)' }}>
+                {summary.biggest_opportunities.map((o, i) => <li key={i}>{o}</li>)}
+              </ul>
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>No category currently scores below 70.</p>
+            )}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-head"><h2>Recommended next steps</h2></div>
+          <div className="card-body">
+            {summary.next_steps?.length ? (
+              <ul className="small" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.9, color: 'var(--ink-2)' }}>
+                {summary.next_steps.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>No specific actions are outstanding.</p>
+            )}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-head"><h2>Business impact</h2></div>
+          <div className="card-body">
+            <p className="small" style={{ margin: 0, color: 'var(--ink-2)' }}>{summary.business_impact}</p>
+          </div>
         </div>
       </div>
 
       <div className="card">
-        <div className="card-head"><h2>Issue severity</h2></div>
-        <div className="card-body">
-          <SeverityBreakdown
-            critical={severity.high} high={severity.medium} warnings={severity.low}
-            passed={pf.passed_count}
-          />
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <h2>New in the premium audit</h2>
-          <div className="hint">Security, accessibility, on-page and off-page extras, performance extras</div>
-        </div>
-        <div className="card-body stack" style={{ gap: 14 }}>
-          {findings.length === 0 && (
-            <p className="small muted" style={{ margin: 0 }}>
-              No issues were detected in these categories.
-            </p>
+        <div className="card-head"><h2>Top priorities</h2></div>
+        <div className="card-body stack" style={{ gap: 12 }}>
+          {priorities.length === 0 && (
+            <p className="small muted" style={{ margin: 0 }}>No priority issues were detected within the checks this audit performs.</p>
           )}
-          {Object.entries(byCategory).map(([cat, items]) => (
-            <div key={cat}>
-              <div className="small strong" style={{ marginBottom: 6 }}>
-                {AUDIT_CATEGORY_LABELS[cat] || cat} <span className="muted">— {items.length}</span>
-              </div>
-              <div className="stack" style={{ gap: 8 }}>
-                {items.map((f) => (
-                  <div key={f.code} className={`problem-item ${f.severity}`}>
-                    <div className="row row-wrap" style={{ gap: 7 }}>
-                      <Badge tone={f.severity === 'high' ? 'danger' : f.severity === 'medium' ? 'warn' : 'ok'}>
-                        {f.severity}
-                      </Badge>
-                    </div>
-                    <div className="t" style={{ marginTop: 6 }}>{f.title}</div>
-                    <div className="d">{f.detail}</div>
-                    {f.recommendation && <div className="r"><strong>Fix:</strong> {f.recommendation}</div>}
-                  </div>
-                ))}
+          {priorities.map((p) => (
+            <div key={p.code} className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+              <span className="action-num">{p.rank}</span>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="row row-wrap" style={{ gap: 6, marginBottom: 3 }}>
+                  <Badge tone={SEVERITY_TONE(p.severity)}>{p.priority}</Badge>
+                  <Badge tone="neutral">{p.category_label}</Badge>
+                  <strong className="small">{p.title}</strong>
+                </div>
+                {p.recommendation && (
+                  <p className="xsmall muted" style={{ margin: 0 }}><strong>Recommended action:</strong> {p.recommendation}</p>
+                )}
               </div>
             </div>
           ))}
@@ -276,12 +312,62 @@ function ScorecardTab({ data }) {
 
       <div className="card">
         <div className="card-head">
+          <h2>Category scores</h2>
+          <div className="hint">Click a category to filter the findings below</div>
+          <div className="spacer" />
+          {activeCategory && (
+            <button className="btn btn-sm" onClick={() => setActiveCategory(null)}>Show all</button>
+          )}
+        </div>
+        <div className="card-body">
+          <CategoryScorecards categories={sc.categories} onSelect={setActiveCategory} selected={activeCategory} />
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h2>Issues by severity</h2></div>
+        <div className="card-body">
+          <SeverityBreakdown
+            critical={sc.severity_counts?.high || 0}
+            high={sc.severity_counts?.medium || 0}
+            warnings={sc.severity_counts?.low || 0}
+            passed={checks.passed_count}
+          />
+        </div>
+      </div>
+
+      {visibleCategories.map((c) => (
+        <div className="card" key={c.category}>
+          <div className="card-head">
+            <h2>{c.label}</h2>
+            <div className="spacer" />
+            <BandPill score={c.health} applicable={c.applicable !== false} />
+          </div>
+          <div className="card-body stack" style={{ gap: 12 }}>
+            {c.applicable === false ? (
+              <Empty title="Not applicable to this website">{c.not_applicable_reason}</Empty>
+            ) : (
+              <>
+                {(byCategory[c.category] || []).length === 0 && (
+                  <p className="small muted" style={{ margin: 0 }}>No evidence-backed issues were detected in this category.</p>
+                )}
+                {(byCategory[c.category] || []).map((f) => (
+                  <FindingCard key={f.code} f={f} whyItMatters={c.why_it_matters} />
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      ))}
+
+      <div className="card">
+        <div className="card-head">
           <h2>Passed checks</h2>
-          <div className="hint">{pf.passed_count} of {pf.total_checked}</div>
+          <div className="hint">{checks.passed_count} of {checks.total_checked}</div>
         </div>
         <div className="card-body">
           <div className="row row-wrap" style={{ gap: 8 }}>
-            {(pf.passed || []).map((p) => (
+            {checks.passed.map((p) => (
               <span key={p.id} className="passfail-chip">
                 <IconCheck size={11} style={{ color: 'var(--ok)' }} /> {p.label}
               </span>
@@ -289,6 +375,51 @@ function ScorecardTab({ data }) {
           </div>
         </div>
       </div>
+
+      {checks.not_verified.length > 0 && (
+        <div className="card">
+          <div className="card-head">
+            <h2>Not verified</h2>
+            <div className="hint">Never fabricated — reported honestly instead of guessed</div>
+          </div>
+          <div className="card-body stack" style={{ gap: 8 }}>
+            {checks.not_verified.map((chk) => (
+              <div key={chk.id} className="row row-wrap" style={{ gap: 8 }}>
+                <Badge tone={describe(CHECK_STATUS, 'not_verified').tone}>{describe(CHECK_STATUS, 'not_verified').label}</Badge>
+                <span className="small muted">{chk.label} — {chk.detail}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FindingCard({ f, whyItMatters }) {
+  return (
+    <div className={`problem-item ${f.severity}`}>
+      <div className="row row-wrap" style={{ gap: 7 }}>
+        <Badge tone={SEVERITY_TONE(f.severity)}>{SEVERITY_LABEL[f.severity] || f.severity}</Badge>
+      </div>
+      <div className="t" style={{ marginTop: 6 }}>{f.title}</div>
+      <div style={{ marginTop: 8 }}>
+        <div className="xsmall muted strong" style={{ textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 2 }}>
+          What we found
+        </div>
+        <div className="d">{f.detail}</div>
+      </div>
+      {whyItMatters && (
+        <div style={{ marginTop: 8 }}>
+          <div className="xsmall muted strong" style={{ textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 2 }}>
+            Why it matters
+          </div>
+          <div className="d">{whyItMatters}</div>
+        </div>
+      )}
+      {f.recommendation && (
+        <div className="r" style={{ marginTop: 8 }}><strong>How to fix:</strong> {f.recommendation}</div>
+      )}
     </div>
   )
 }
@@ -379,6 +510,7 @@ function Evidence({ data }) {
     ['Security', ef.security],
     ['Accessibility', ef.accessibility],
     ['On-page SEO extras', ef.onpage],
+    ['Local SEO', ef.local_seo],
     ['Off-page & authority', ef.offpage],
     ['Performance extras', ef.performance_extra],
   ].filter(([, v]) => v && Object.keys(v).length)

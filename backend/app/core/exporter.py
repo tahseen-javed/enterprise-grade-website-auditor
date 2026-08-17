@@ -29,6 +29,13 @@ from ..models import (
 )
 from ..settings import EXPORT_DIR
 
+_TOP_ISSUE_RANKS = 5
+_TOP_ISSUE_COLUMNS: List[str] = [
+    f"top_issue_{i}{suffix}"
+    for i in range(1, _TOP_ISSUE_RANKS + 1)
+    for suffix in ("", "_category", "_severity", "_fix")
+]
+
 # Appended, in this order, after every original column (spec 11).
 ENRICHMENT_COLUMNS: List[str] = [
     "website_status",
@@ -58,6 +65,13 @@ ENRICHMENT_COLUMNS: List[str] = [
 
     "problems",
     "recommendations",
+
+    # Structured, one-issue-per-column breakdown of the premium audit's Top 5
+    # priorities (see scoring.top_priorities) - never joined into one cell,
+    # so each issue can be read, sorted or filtered on its own in a
+    # spreadsheet. Blank when a lead has fewer than 5 priority issues, or was
+    # not audited by the premium engine.
+    *_TOP_ISSUE_COLUMNS,
 
     "contact_channel",
     "contact_channel_reason",
@@ -108,6 +122,26 @@ def _join_recommendations(recs: List[Dict[str, Any]]) -> str:
     return " | ".join(
         f"{i + 1}. {r.get('recommendation', '')}" for i, r in enumerate(recs or [])
     )
+
+
+def _top_issue_columns(priorities: List[Dict[str, Any]]) -> Dict[str, str]:
+    """
+    One spreadsheet column per field per ranked issue (top_issue_1,
+    top_issue_1_category, top_issue_1_severity, top_issue_1_fix, top_issue_2,
+    ...) from the premium audit's Top 5 priorities - never a single cell with
+    every issue joined together. Blank for ranks beyond how many priority
+    issues this lead actually has.
+    """
+    out: Dict[str, str] = {c: "" for c in _TOP_ISSUE_COLUMNS}
+    for p in (priorities or [])[:_TOP_ISSUE_RANKS]:
+        rank = p.get("rank")
+        if not isinstance(rank, int) or not (1 <= rank <= _TOP_ISSUE_RANKS):
+            continue
+        out[f"top_issue_{rank}"] = p.get("title", "")
+        out[f"top_issue_{rank}_category"] = p.get("category_label", "")
+        out[f"top_issue_{rank}_severity"] = (p.get("severity") or "").upper()
+        out[f"top_issue_{rank}_fix"] = p.get("recommendation", "")
+    return out
 
 
 def build_rows(session, job_id: int) -> Tuple[List[str], List[Dict[str, Any]]]:
@@ -213,6 +247,7 @@ def build_rows(session, job_id: int) -> Tuple[List[str], List[Dict[str, Any]]]:
 
             "problems": _join_problems(audit.problems if audit else []),
             "recommendations": _join_recommendations(audit.recommendations if audit else []),
+            **_top_issue_columns((audit.extra or {}).get("priorities", []) if audit else []),
 
             "contact_channel": _CONTACT_CHANNEL_DISPLAY.get(b.best_channel or "", (b.best_channel or "SKIP").upper()),
             "contact_channel_reason": b.channel_reason or "",
@@ -334,6 +369,10 @@ COLUMN_DOCS: Dict[str, str] = {
     "lead_tier": "A+ / A / B / C / D combining opportunity, website validity, contact availability "
                  "and whether a strong specific problem exists.",
     "problems": "The detected problems, each backed by an actual measurement.",
+    "top_issue_1": "The single highest-priority issue from the premium audit's Top 5 priorities. "
+                   "See top_issue_1_category / _severity / _fix for the rest of that issue's record, "
+                   "and top_issue_2..5 for the next four - each issue gets its own columns rather "
+                   "than being joined into one cell.",
     "contact_channel": "WHATSAPP / EMAIL / LINKEDIN / PHONE / SKIP, in that priority order. WhatsApp "
                        "requires a confirmed link on the site; email requires a public address found "
                        "on the site; LinkedIn requires the business's own company page found on the "

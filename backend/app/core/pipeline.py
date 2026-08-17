@@ -62,6 +62,8 @@ from .phones import assess_whatsapp, normalize_phone, resolve_region, whatsapp_u
 from .report_html import render_report, write_report
 from .scoring import (
     CATEGORY_LABELS,
+    audit_category_of,
+    build_executive_summary,
     build_recommendations,
     build_scorecard,
     compute_score,
@@ -69,6 +71,7 @@ from .scoring import (
     lead_tier,
     select_problems,
     tier_for_score,
+    top_priorities,
 )
 from .urls import registrable_domain
 
@@ -645,6 +648,8 @@ class JobRunner:
         extra_facts: Dict[str, Dict[str, Any]] = {}
         extra_findings: List[Finding] = []
         scorecard: Dict[str, Any] = {}
+        priorities: List[Dict[str, Any]] = []
+        executive_summary: Dict[str, Any] = {}
         audit_kind = "website"
         audit_status = "completed"
         audit_error = ""
@@ -654,12 +659,28 @@ class JobRunner:
                 crawl, extracted=extracted, perf=perf, category_hint=biz["category"]
             )
             # Premium audit scorecard: additive checks (security, accessibility,
-            # on-page extras, off-page/authority, performance extras) layered on
-            # top of the same findings, never altering the opportunity score above.
+            # on-page extras, off-page/authority, performance extras, local SEO)
+            # layered on top of the same findings, never altering the opportunity
+            # score above.
             extra_facts, extra_findings = run_extra_checks(crawl)
-            scorecard = build_scorecard(findings + extra_findings)
+            all_premium_findings = findings + extra_findings
+            local_seo_applicable = extra_facts.get("local_seo", {}).get("applicable", True)
+            category_applicability = {"local_seo": local_seo_applicable}
+            applicability_reason = {
+                "local_seo": extra_facts.get("local_seo", {}).get("reason", ""),
+            }
+            scorecard = build_scorecard(
+                all_premium_findings,
+                category_applicability=category_applicability,
+                applicability_reason=applicability_reason,
+                pagespeed_measured=bool(perf and perf.get("measured")),
+            )
+            priorities = top_priorities(all_premium_findings)
+            executive_summary = build_executive_summary(scorecard, all_premium_findings, priorities)
+            checks = scorecard["checks"]
             activity(name, f"Premium audit scorecard: {scorecard['overall_score']}/100 overall "
-                           f"({scorecard['pass_fail']['passed_count']}/{scorecard['pass_fail']['total_checked']} checks passed)",
+                           f"({checks['passed_count']}/{checks['total_checked']} checks passed, "
+                           f"{checks['failed_count']} critical, {checks['warning_count']} warnings)",
                      job_id=self.job_id, business_id=business_id, stage="audit")
         elif disc.status == STATUS_NOT_A_WEBSITE:
             audit_kind = "no_website"
@@ -856,6 +877,7 @@ class JobRunner:
                     audit_kind, phone, wa, validations, extracted, business_id, name,
                     legacy_findings=findings,
                     extra_facts=extra_facts, extra_findings=extra_findings, scorecard=scorecard,
+                    priorities=priorities, executive_summary=executive_summary,
                 )
                 activity(name, "Audit report generated",
                          job_id=self.job_id, business_id=business_id, stage="report")
@@ -883,7 +905,9 @@ class JobRunner:
             "audit_status": audit_status, "audit_error": audit_error,
             "report_path": report_path, "crawl": crawl, "score": score_val,
             "opp_tier": opp_tier, "clear": clear, "no_opp_reason": no_opp_reason,
+            "findings": findings,
             "extra_facts": extra_facts, "extra_findings": extra_findings, "scorecard": scorecard,
+            "priorities": priorities, "executive_summary": executive_summary,
             "linkedin_url": linkedin_url, "linkedin_status": linkedin_status,
         }
         await run_db(lambda s: self._persist(s, business_id, payload))
@@ -1021,6 +1045,8 @@ class JobRunner:
         extra_facts: Optional[Dict[str, Any]] = None,
         extra_findings: Optional[List[Finding]] = None,
         scorecard: Optional[Dict[str, Any]] = None,
+        priorities: Optional[List[Dict[str, Any]]] = None,
+        executive_summary: Optional[Dict[str, Any]] = None,
     ) -> str:
         location = ", ".join(p for p in (biz["city"], biz["state"], biz["country"]) if p)
         contacts: List[Dict[str, Any]] = []
@@ -1080,6 +1106,8 @@ class JobRunner:
             legacy_findings=legacy_findings or [],
             extra_findings=extra_findings or [],
             extra_facts=extra_facts or {},
+            priorities=priorities or [],
+            executive_summary=executive_summary or {},
         )
         return write_report(self.job_id, business_id, name, html)
 
@@ -1177,8 +1205,25 @@ class JobRunner:
             recommendations=p["recommendations"],
             extra={
                 "facts": p.get("extra_facts") or {},
-                "findings": [f.to_dict() for f in (p.get("extra_findings") or [])],
+                "findings": [
+                    {**f.to_dict(), "premium_category": audit_category_of(f)}
+                    for f in (p.get("extra_findings") or [])
+                ],
+                # The full legacy-category finding set (technical/mobile/conversion/
+                # trust/contact/content), not just the top-7 subset stored in the
+                # `problems` column - needed so the premium category breakdown (e.g.
+                # Security, which blends legacy no_https/mixed_content with the
+                # extra security_* findings) can show every finding in a category,
+                # matching the HTML report exactly rather than a partial view.
+                # `premium_category` carries the same remap `audit_category_of` uses
+                # server-side, so the frontend never has to duplicate that table.
+                "legacy_findings": [
+                    {**f.to_dict(), "premium_category": audit_category_of(f)}
+                    for f in (p.get("findings") or [])
+                ],
                 "scorecard": p.get("scorecard") or {},
+                "priorities": p.get("priorities") or [],
+                "executive_summary": p.get("executive_summary") or {},
             },
             report_path=p["report_path"],
             audit_status=p["audit_status"] if p["clear"] else (

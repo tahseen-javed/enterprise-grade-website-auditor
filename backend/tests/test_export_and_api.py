@@ -93,6 +93,16 @@ def seeded_job():
                        "code": "no_primary_cta_above_fold"}],
             recommendations=[{"rank": 1, "problem_code": "no_primary_cta_above_fold",
                               "recommendation": "Add a prominent booking button."}],
+            extra={"priorities": [
+                {"rank": 1, "code": "no_https", "category": "security", "category_label": "Security",
+                 "severity": "high", "priority": "P1", "title": "The site does not load over HTTPS",
+                 "detail": "Not served over HTTPS.", "recommendation": "Install an SSL certificate.",
+                 "impact_points": 30},
+                {"rank": 2, "code": "missing_title", "category": "onpage", "category_label": "On-Page SEO",
+                 "severity": "medium", "priority": "P2", "title": "The homepage has no title tag",
+                 "detail": "No <title> element was found.", "recommendation": "Add a descriptive title.",
+                 "impact_points": 18},
+            ]},
             report_path="",
         ))
         s.add(OutreachDraft(
@@ -275,6 +285,24 @@ class TestExportIntegrity:
             _, rows = build_rows(s, seeded_job)
         assert "No clear call to action" in rows[0]["problems"]
         assert "prominent booking button" in rows[0]["recommendations"]
+
+    def test_top_priority_issues_get_their_own_columns(self, seeded_job):
+        """The premium Top 5 priorities must never be exported as a single
+        joined cell - each ranked issue gets its own title/category/severity/
+        fix columns, and unused ranks are blank rather than omitted."""
+        with session_scope(write=False) as s:
+            headers, rows = build_rows(s, seeded_job)
+        wa = rows[0]
+        assert wa["top_issue_1"] == "The site does not load over HTTPS"
+        assert wa["top_issue_1_category"] == "Security"
+        assert wa["top_issue_1_severity"] == "HIGH"
+        assert wa["top_issue_1_fix"] == "Install an SSL certificate."
+        assert wa["top_issue_2"] == "The homepage has no title tag"
+        assert wa["top_issue_3"] == ""  # only 2 priorities were recorded for this lead
+        assert "top_issue_5_fix" in headers
+
+        em = rows[1]  # no `extra.priorities` at all for this lead
+        assert em["top_issue_1"] == ""
 
     def test_no_whatsapp_url_for_a_landline(self, seeded_job):
         with session_scope(write=False) as s:

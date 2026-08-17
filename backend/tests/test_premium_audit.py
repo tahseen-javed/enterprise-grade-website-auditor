@@ -8,11 +8,14 @@ engine, which these tests never touch.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.core.audit_checks import (
     check_accessibility,
+    check_local_seo,
     check_offpage,
     check_onpage,
     check_performance_extra,
@@ -27,14 +30,16 @@ from app.core.discovery import (
     STATUS_VALID,
 )
 from app.core.discovery import verify_direct_website
-from app.core.page import parse_html
+from app.core.page import classify_page, parse_html
 from app.core.report_html import render_report
 from app.core.scoring import (
     AUDIT_CATEGORIES,
-    build_pass_fail_summary,
+    build_check_results,
+    build_executive_summary,
     build_scorecard,
     compute_score,
     priority_for,
+    top_priorities,
 )
 from app.main import app
 from app.settings import WEIGHTS_DEFAULTS
@@ -264,10 +269,12 @@ class TestPerformanceExtra:
 
 
 class TestRunExtraChecks:
-    def test_returns_all_five_categories(self):
+    def test_returns_all_six_categories(self):
         crawl = crawl_from([("homepage", "/", RICH_HTML)], is_https=True, home_headers={})
         facts, findings = run_extra_checks(crawl)
-        assert set(facts) == {"security", "accessibility", "onpage", "offpage", "performance_extra"}
+        assert set(facts) == {
+            "security", "accessibility", "onpage", "offpage", "performance_extra", "local_seo",
+        }
 
     def test_a_broken_check_cannot_kill_the_whole_run(self, monkeypatch):
         import app.core.audit_checks as ac
@@ -304,8 +311,11 @@ class TestPremiumScorecard:
         assert {c["category"] for c in sc["categories"]} == set(AUDIT_CATEGORIES)
         assert 0 <= sc["overall_score"] <= 100
         for c in sc["categories"]:
-            assert 0 <= c["health"] <= 100
-        assert sc["pass_fail"]["total_checked"] > 0
+            if c["applicable"]:
+                assert 0 <= c["health"] <= 100
+            else:
+                assert c["health"] is None
+        assert sc["checks"]["total_checked"] > 0
 
     def test_higher_is_better_for_the_premium_score(self):
         """Unlike the legacy opportunity score, the scorecard score is health-style."""
@@ -323,7 +333,7 @@ class TestPremiumScorecard:
         good_score = build_scorecard(good_l + good_e)["overall_score"]
         assert good_score > bad_score
 
-    def test_pass_fail_never_double_counts_a_check(self):
+    def test_check_results_never_double_counts_a_check(self):
         crawl = crawl_from([("homepage", "/", RICH_HTML)], is_https=True, home_headers={
             "strict-transport-security": "max-age=1", "content-security-policy": "default-src 'self'",
             "x-frame-options": "SAMEORIGIN", "x-content-type-options": "nosniff",
@@ -331,8 +341,16 @@ class TestPremiumScorecard:
         })
         _, legacy = run_all_checks(crawl)
         _, extra = run_extra_checks(crawl)
-        summary = build_pass_fail_summary(legacy + extra)
-        assert summary["passed_count"] + summary["failed_count"] == summary["total_checked"]
+        summary = build_check_results(legacy + extra)
+        assert (
+            summary["passed_count"] + summary["warning_count"] + summary["failed_count"]
+            == summary["total_checked"]
+        )
+        assert (
+            summary["passed_count"] + summary["warning_count"] + summary["failed_count"]
+            + summary["not_verified_count"] + summary["not_applicable_count"]
+            == summary["total_catalogued"]
+        )
 
     def test_priority_is_deterministic_from_severity(self):
         crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)], is_https=False)
@@ -342,6 +360,213 @@ class TestPremiumScorecard:
             assert p in ("P1", "P2", "P3")
             if f.severity == "high":
                 assert p == "P1"
+
+
+LOCAL_BUSINESS_HTML = """<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Acme Roofing - Roof repairs in Leeds</title>
+<meta name="description" content="Acme Roofing provides roof repairs across Leeds.">
+</head><body>
+<main>
+<h1>Acme Roofing</h1>
+<p>We repair and replace roofs across Leeds. Areas we serve: Leeds, Bradford and Wakefield.</p>
+<p>14 Kirkstall Road, Leeds. Opening hours: Mon-Fri 9am-5pm.</p>
+<p>Testimonials: "Great job, highly recommend" - Sarah, Leeds.</p>
+<a href="https://www.google.com/maps/place/Acme+Roofing">Find us on Google Maps</a>
+</main>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"LocalBusiness","name":"Acme Roofing",
+ "address":{"@type":"PostalAddress","streetAddress":"14 Kirkstall Road","addressLocality":"Leeds"}}
+</script>
+</body></html>"""
+
+
+class TestPageClassificationWordBoundaries:
+    """
+    Regression: classify_page used to match a page-type keyword as a raw
+    substring of the URL path, so "location" matched inside "allocations"
+    and misclassified IANA's real /numbers/allocations/ page as a
+    "locations" page - which in turn made check_local_seo wrongly treat
+    iana.org as a local business. Found via a live audit against a real
+    site, not a synthetic fixture.
+    """
+
+    def test_allocations_is_not_misread_as_locations(self):
+        assert classify_page("https://example.test/numbers/allocations/") != "locations"
+
+    def test_relocation_guide_is_not_misread_as_locations(self):
+        assert classify_page("https://example.test/relocation-guide") != "locations"
+
+    def test_genuine_locations_path_is_still_detected(self):
+        assert classify_page("https://example.test/our-locations/") == "locations"
+        assert classify_page("https://example.test/location/") == "locations"
+
+    def test_genuine_locations_link_text_is_still_detected(self):
+        assert classify_page("https://example.test/find-us-here", "Our Locations") == "locations"
+
+    def test_dotted_filename_keyword_still_matches(self):
+        assert classify_page("https://example.test/our-team.html") == "team"
+
+
+class TestLocalSeoChecks:
+    def test_no_local_signals_is_marked_not_applicable(self):
+        """example.com-style content with no address/map/service-area/schema
+        should never be scored as a failing local business - it is simply
+        not one, as far as anything observable on the page shows."""
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)])
+        facts, findings = check_local_seo(crawl)
+        assert facts["applicable"] is False
+        assert findings == []
+        assert "reason" in facts and facts["reason"]
+
+    def test_rich_html_alone_has_no_local_signals(self):
+        """RICH_HTML (used across this file as a 'good' generic site) has no
+        address, map link, service-area wording or LocalBusiness schema -
+        confirms applicability is evidence-based, not assumed from being a
+        well-built site."""
+        crawl = crawl_from([("homepage", "/", RICH_HTML)])
+        facts, _ = check_local_seo(crawl)
+        assert facts["applicable"] is False
+
+    def test_address_and_service_area_text_alone_trigger_applicability(self):
+        html = NO_HEADERS_HTML.replace(
+            "</body>",
+            "<p>14 Kirkstall Road, Leeds. Areas we serve: Leeds and Bradford.</p></body>",
+        )
+        crawl = crawl_from([("homepage", "/", html)])
+        facts, findings = check_local_seo(crawl)
+        assert facts["applicable"] is True
+        assert facts["address_signal"] is True
+        assert facts["service_area_signal"] is True
+        codes = {f.code for f in findings}
+        assert "local_no_address_signal" not in codes
+        assert "local_no_service_area_content" not in codes
+        assert "local_no_business_schema" in codes  # still no structured data
+
+    def test_full_local_business_signals_pass_the_relevant_checks(self):
+        crawl = crawl_from([("homepage", "/", LOCAL_BUSINESS_HTML)])
+        facts, findings = check_local_seo(crawl)
+        assert facts["applicable"] is True
+        assert facts["local_business_schema"] is True
+        assert facts["schema_has_address"] is True
+        assert facts["map_or_gbp_link"] is True
+        assert facts["service_area_signal"] is True
+        assert facts["opening_hours_signal"] is True
+        assert facts["reviews_signal"] is True
+        codes = {f.code for f in findings}
+        assert "local_no_business_schema" not in codes
+        assert "local_no_address_signal" not in codes
+        assert "local_no_map_or_gbp_link" not in codes
+        assert "local_no_service_area_content" not in codes
+        assert "local_no_opening_hours" not in codes
+        assert "local_no_reviews_or_testimonials" not in codes
+        # Reviews are present as text but not backed by Review/AggregateRating
+        # structured data, so that one specific, narrower gap should surface.
+        assert "local_reviews_not_structured" in codes
+
+    def test_never_penalises_a_site_with_no_local_signals(self):
+        """The overall premium score for a non-local site must not be pulled
+        down by local_seo findings that were never generated because the
+        category was correctly marked not-applicable."""
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)])
+        _, legacy = run_all_checks(crawl)
+        extra_facts, extra = run_extra_checks(crawl)
+        applicable = extra_facts["local_seo"]["applicable"]
+        assert applicable is False
+        sc_without_flag = build_scorecard(legacy + extra)
+        sc_with_flag = build_scorecard(
+            legacy + extra, category_applicability={"local_seo": applicable},
+        )
+        local_row = next(c for c in sc_with_flag["categories"] if c["category"] == "local_seo")
+        assert local_row["applicable"] is False
+        assert local_row["health"] is None
+        assert local_row["weight"] == 0
+        # Marking it not-applicable must not silently change the *other*
+        # categories' scores - only remove local_seo from the denominator.
+        for cat in AUDIT_CATEGORIES:
+            if cat == "local_seo":
+                continue
+            a = next(c for c in sc_without_flag["categories"] if c["category"] == cat)
+            b = next(c for c in sc_with_flag["categories"] if c["category"] == cat)
+            assert a["health"] == b["health"]
+
+
+class TestCheckStatusVocabulary:
+    def test_always_not_verified_items_are_never_fabricated(self):
+        crawl = crawl_from([("homepage", "/", RICH_HTML)])
+        _, legacy = run_all_checks(crawl)
+        _, extra = run_extra_checks(crawl)
+        results = build_check_results(legacy + extra)
+        by_id = {c["id"]: c for c in results["checks"]}
+        for check_id in ("color_contrast", "backlink_profile", "domain_authority"):
+            assert by_id[check_id]["status"] == "not_verified"
+
+    def test_core_web_vitals_is_not_verified_without_pagespeed(self):
+        crawl = crawl_from([("homepage", "/", RICH_HTML)])
+        _, legacy = run_all_checks(crawl)
+        _, extra = run_extra_checks(crawl)
+        results = build_check_results(legacy + extra, pagespeed_measured=False)
+        cwv = next(c for c in results["checks"] if c["id"] == "core_web_vitals")
+        assert cwv["status"] == "not_verified"
+
+    def test_not_applicable_category_marks_every_check_in_it(self):
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)])
+        _, legacy = run_all_checks(crawl)
+        _, extra = run_extra_checks(crawl)
+        results = build_check_results(
+            legacy + extra,
+            category_applicability={"local_seo": False},
+            applicability_reason={"local_seo": "Not a local business."},
+        )
+        local_checks = [c for c in results["checks"] if c["category"] == "local_seo"]
+        assert local_checks  # the catalogue entries still exist...
+        assert all(c["status"] == "not_applicable" for c in local_checks)
+        # ...and are excluded from the evaluated total.
+        assert results["not_applicable_count"] == len(local_checks)
+        assert results["total_checked"] == (
+            results["passed_count"] + results["warning_count"] + results["failed_count"]
+        )
+
+    def test_fail_vs_warning_split_by_severity(self):
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)], is_https=False, home_headers={})
+        _, legacy = run_all_checks(crawl)
+        _, extra = run_extra_checks(crawl)
+        results = build_check_results(legacy + extra)
+        https_check = next(c for c in results["checks"] if c["id"] == "https")
+        assert https_check["status"] == "fail"  # no_https is a high-severity finding
+
+
+class TestTopPrioritiesAndExecutiveSummary:
+    def test_top_priorities_is_capped_and_spread_across_categories(self):
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)], is_https=False, home_headers={})
+        _, legacy = run_all_checks(crawl)
+        _, extra = run_extra_checks(crawl)
+        priorities = top_priorities(legacy + extra, n=5)
+        assert 1 <= len(priorities) <= 5
+        cats = [p["category"] for p in priorities]
+        assert len(set(cats)) == len(cats) or len(priorities) > len(set(cats))
+        for p in priorities:
+            assert p["priority"] in ("P1", "P2", "P3")
+            assert p["title"]
+
+    def test_executive_summary_reflects_a_poor_site(self):
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)], is_https=False, home_headers={})
+        _, legacy = run_all_checks(crawl)
+        _, extra = run_extra_checks(crawl)
+        all_findings = legacy + extra
+        sc = build_scorecard(all_findings)
+        priorities = top_priorities(all_findings)
+        summary = build_executive_summary(sc, all_findings, priorities)
+        assert summary["headline"]
+        assert isinstance(summary["top_problems"], list) and summary["top_problems"]
+        assert "checks_summary" in summary and summary["checks_summary"]["total"] > 0
+
+    def test_executive_summary_never_raises_with_no_findings(self):
+        summary = build_executive_summary({"overall_score": None, "categories": [], "checks": {}}, [], [])
+        assert summary["headline"]
+        assert summary["whats_working"] == []
+        assert summary["top_problems"] == []
 
 
 class TestDirectUrlDiscovery:
@@ -389,7 +614,15 @@ class TestPremiumReportRendering:
     def _render(self, crawl):
         legacy_facts, legacy_findings = run_all_checks(crawl)
         extra_facts, extra_findings = run_extra_checks(crawl)
-        scorecard = build_scorecard(legacy_findings + extra_findings)
+        all_findings = legacy_findings + extra_findings
+        local_applicable = extra_facts.get("local_seo", {}).get("applicable", True)
+        scorecard = build_scorecard(
+            all_findings,
+            category_applicability={"local_seo": local_applicable},
+            applicability_reason={"local_seo": extra_facts.get("local_seo", {}).get("reason", "")},
+        )
+        priorities = top_priorities(all_findings)
+        executive_summary = build_executive_summary(scorecard, all_findings, priorities)
         problems = [
             {"rank": 1, "code": f.code, "category": f.display_category,
              "category_label": f.display_category, "severity": f.severity,
@@ -414,6 +647,8 @@ class TestPremiumReportRendering:
             legacy_findings=legacy_findings,
             extra_findings=extra_findings,
             extra_facts=extra_facts,
+            priorities=priorities,
+            executive_summary=executive_summary,
         )
         return html, scorecard
 
@@ -424,7 +659,34 @@ class TestPremiumReportRendering:
         assert str(scorecard["overall_score"]) in html
         assert "Technical SEO" in html
         assert "Conversion" in html
-        assert "Not available" in html  # off-page backlink disclosure
+        assert "Not verified" in html  # off-page backlink disclosure + not-verified checks
+
+    def test_poor_site_report_has_the_premium_structure(self):
+        """The report must read as a structured client document, not a
+        giant text blob: an executive summary, a Top 5 priorities section,
+        numbered category pages, and - since NO_HEADERS_HTML has no local
+        business signals - an explicit Not Applicable banner for Local SEO
+        rather than a fabricated failing score."""
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)], is_https=False, home_headers={})
+        html, scorecard = self._render(crawl)
+        assert "Executive summary" in html
+        assert "Top 5 priorities" in html
+        assert "Local SEO" in html
+        assert "Not Applicable" in html
+        assert "Not applicable to this website" in html
+        assert "01</div>" in html  # numbered section badge for the first category
+        assert "<svg" in html  # real charts, not just CSS bars
+        local_row = next(c for c in scorecard["categories"] if c["category"] == "local_seo")
+        assert local_row["applicable"] is False
+
+    def test_finding_cards_use_labelled_fields_not_a_joined_blob(self):
+        """Every finding must render as What we found / How to fix, never
+        as a single numbered string like '1. ... 2. ... 3. ...'."""
+        crawl = crawl_from([("homepage", "/", NO_HEADERS_HTML)], is_https=False, home_headers={})
+        html, _ = self._render(crawl)
+        assert "What we found" in html
+        assert "How to fix" in html
+        assert re.search(r"1\.[^<]*\|[^<]*2\.", html) is None
 
     def test_renders_without_raising_for_a_well_built_site(self):
         crawl = crawl_from(
