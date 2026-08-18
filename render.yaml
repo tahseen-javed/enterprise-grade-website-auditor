@@ -1,0 +1,64 @@
+# =============================================================================
+# Render Blueprint - one service, because the backend serves the dashboard.
+#
+# Import this file at https://render.com/deploy (Blueprints -> New Blueprint
+# Instance) and point it at this repository. Everything below is applied
+# automatically; nothing needs to be typed into the dashboard by hand except
+# the custom domain.
+#
+# WHY A DISK: this app keeps its SQLite database, generated HTML reports and
+# CSV/XLSX exports on the filesystem. Without a persistent disk every deploy
+# or restart would wipe the audit history. The disk below is what makes
+# "persistent audit history" actually true in production.
+#
+# A disk requires the Starter plan (Render's free plan has an ephemeral
+# filesystem and also sleeps after 15 minutes idle, which would both lose
+# history and make the first request after idling time out mid-audit).
+# See DEPLOY.md for the genuinely-free alternative and its trade-offs.
+# =============================================================================
+
+services:
+  - type: web
+    name: website-audit-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: frankfurt          # change to the region nearest your users
+    branch: main
+    autoDeploy: true           # every push to main redeploys
+
+    # Render waits for this to return 200 before routing traffic to a new
+    # deploy, so a broken build never replaces a working one.
+    healthCheckPath: /api/health
+
+    disk:
+      name: audit-data
+      mountPath: /data         # matches WAE_DATA_DIR in the Dockerfile
+      sizeGB: 1
+
+    envVars:
+      # Where the database, reports and exports are written. Must equal the
+      # disk mountPath above.
+      - key: WAE_DATA_DIR
+        value: /data
+
+      # Bind to all interfaces inside the container; Render's router cannot
+      # reach 127.0.0.1.
+      - key: WAE_BACKEND_HOST
+        value: 0.0.0.0
+
+      # The dashboard is served by this same service, so the browser only ever
+      # sees one origin and no cross-origin allowance is needed. Left empty
+      # deliberately: an empty list is safer than a wildcard.
+      - key: WAE_CORS_ORIGINS
+        value: ""
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+      # NOTE: no API keys here. PageSpeed / Claude / Google Places keys are
+      # entered in the app's own Settings page and stored server-side under
+      # /data, so they never appear in this file or in git. If you would
+      # rather inject one at the platform level, add it in the Render
+      # dashboard as a secret env var - never commit it.

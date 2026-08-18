@@ -270,6 +270,15 @@ this app's job is auditing websites, not managing leads.
 
 ---
 
+## Deploying it publicly
+
+See **[DEPLOY.md](DEPLOY.md)** — the repository already contains a production
+`Dockerfile`, a Render blueprint (`render.yaml`) with a persistent disk, and a
+GitHub Actions CI workflow. The backend serves the dashboard, so it deploys as
+a single service on one HTTPS URL.
+
+---
+
 ## Troubleshooting
 
 **Port already in use** — `START.bat` names the program holding it, then automatically

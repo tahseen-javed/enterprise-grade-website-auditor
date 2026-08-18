@@ -1,0 +1,22 @@
+# Build context hygiene: never ship local runtime state or build artefacts.
+.git
+.github
+data/
+**/.venv/
+**/node_modules/
+frontend/dist/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+*.log
+.env
+.env.*
+!.env.example
+*.bat
+*.command
+*.sh
+scripts/
+sample_data/
+data/reports/
+README.md
+DEPLOY.md
