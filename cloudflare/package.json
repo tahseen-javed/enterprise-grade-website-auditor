@@ -1,0 +1,27 @@
+{
+  "name": "website-auditor-cloudflare",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build:frontend": "node scripts/build-frontend.mjs",
+    "dev": "npm run build:frontend && wrangler dev",
+    "deploy": "npm run build:frontend && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply website-auditor-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply website-auditor-db --remote",
+    "tail": "wrangler tail"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "node-html-parser": "^6.1.13",
+    "tldts": "^6.1.71",
+    "fflate": "^0.8.2",
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260811.1",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.123.0"
+  }
+}

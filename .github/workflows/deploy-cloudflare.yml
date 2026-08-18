@@ -1,0 +1,47 @@
+# Continuous deployment for the Cloudflare Workers target (cloudflare/).
+# Separate from ci.yml (which tests the original backend/frontend for the
+# Docker/Render deployment path) and from the portfolio repository — this
+# workflow only ever touches this repo's own Cloudflare Worker.
+#
+# Requires one repository secret, set once in GitHub:
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#   Name:  CLOUDFLARE_API_TOKEN
+#   Value: an API token from https://dash.cloudflare.com/profile/api-tokens
+#          using the "Edit Cloudflare Workers" template (grants Workers
+#          Scripts, Workflows, D1, R2 and Account Settings edit access to
+#          this account only) — never the account's Global API Key.
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/**"
+      - "frontend/**"
+      - ".github/workflows/deploy-cloudflare.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    name: Build and deploy Worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Cloudflare project dependencies
+        working-directory: cloudflare
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: cloudflare
+        run: npm run typecheck
+
+      - name: Build dashboard + deploy Worker
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npm run deploy

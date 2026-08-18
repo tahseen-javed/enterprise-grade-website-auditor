@@ -1,0 +1,78 @@
+#:schema node_modules/wrangler/config-schema.json
+# =============================================================================
+# Website Auditor — Cloudflare Workers deployment.
+#
+# This is a SEPARATE deployment target from the existing backend/ + frontend/
+# (which still runs unmodified via START.bat / Docker / Render). Nothing here
+# touches those. See cloudflare/README.md for the full picture.
+# =============================================================================
+
+name = "website-auditor"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# The built React dashboard (copied from ../frontend/dist by
+# scripts/build-frontend.mjs before every dev/deploy run). Any request that
+# doesn't match a real file falls back to index.html, which is what makes
+# SPA deep links like /audits work on a hard refresh.
+# run_worker_first = true routes every request through the Worker first;
+# index.ts explicitly delegates anything outside /api/* to the ASSETS
+# binding. (The installed Wrangler 3.x only accepts a boolean here, not the
+# newer per-path glob array — true is also simpler to reason about, since
+# all routing logic then lives in one place.)
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[observability]
+enabled = true
+
+[vars]
+APP_NAME = "Advanced Website Auditor"
+APP_VERSION = "1.0.0"
+
+# ---- D1: audit history, job state, settings --------------------------------
+# database_id is filled in by scripts/setup-cloudflare.mjs (or manually) after
+# `wrangler d1 create website-auditor-db`.
+[[d1_databases]]
+binding = "DB"
+database_name = "website-auditor-db"
+database_id = "f788b051-73cc-45ee-853e-b7a9c267b524"
+migrations_dir = "migrations"
+
+# ---- R2: generated HTML reports + CSV/XLSX exports --------------------------
+# TEMPORARILY DISABLED — the bucket "website-auditor-reports" exists (created
+# via the dashboard, since `wrangler r2 bucket create` hits a known Cloudflare
+# account-propagation bug, error 10042 "Please enable R2 through the
+# Cloudflare Dashboard", even though R2 shows enabled — see
+# https://github.com/cloudflare/workers-sdk/issues/2877 and the Cloudflare
+# Community threads on the same code), but `wrangler deploy` also fails while
+# verifying this binding against the same broken endpoint. The app degrades
+# gracefully without it (audits still run and score; only the downloadable
+# HTML report and export-history list are unavailable — see
+# src/workflows/audit-workflow.ts's try/catch around putReport).
+#
+# TO RE-ENABLE: once `npx wrangler r2 bucket list` succeeds without error
+# 10042 (may just need time for Cloudflare's account provisioning to
+# propagate, or a support ticket referencing that error code), uncomment the
+# block below and run `npm run deploy` again. No other code changes needed.
+# [[r2_buckets]]
+# binding = "REPORTS"
+# bucket_name = "website-auditor-reports"
+
+# ---- Workflows: the long-running audit pipeline -----------------------------
+[[workflows]]
+name = "website-auditor-audit"
+binding = "AUDIT_WORKFLOW"
+class_name = "AuditWorkflow"
+
+# Deliberately no [limits] block: this starts on the Workers FREE plan, whose
+# 10ms CPU-per-invocation cap cannot be raised at all (Cloudflare rejects a
+# [limits].cpu_ms override on a free account). If production testing shows an
+# audit failing on the CPU limit, the fix is: upgrade the account to Workers
+# Paid ($5/mo), then uncomment the block below and redeploy.
+# [limits]
+# cpu_ms = 30000
